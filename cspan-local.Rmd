@@ -1,0 +1,336 @@
+---
+title: "dmd-cspan-analysis"
+author: "Chris Hallsworth"
+date: "2023-08-01"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, warning=FALSE, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, warning=FALSE, include=FALSE}
+library(FactoMineR)
+library(readr)
+library(tidyverse)
+library(dplyr)
+library(ggtern)
+library(factoextra)
+library(nlme)
+rs <- read_csv("rs.csv")
+#View(rs)
+```
+
+Chris' snippet of code
+
+```{r}
+#rs_clean <- rs %>% filter(STUDYID == "DMD-1005",
+                          #RSTEST == "NSAA1-Total",
+                          #VISITNUM <= 15) 
+#rs_clean$nsaa <- as.numeric(rs_clean$RSORRES)
+```
+
+Now we perform some data analysis. Firstly, we only obtain data which belong to the study DMD-1005. We then filter so that we only get values of each NSAA component at baseline for each patient. The VISITNUM are in a nonsensical order because some patients are assigned a visit number of 99. This has to be investigated - hypothesis is that the patients which were assigned a VISITNUM of 99 did not make it past screening.
+
+```{r}
+# get only the relevant study
+rs_1005 <- rs %>% filter(STUDYID == "DMD-1005")
+
+# find all patients that participated in the study before screening
+rs_1005_base <- rs_1005 %>% filter(VISITNUM == 0)
+
+base_patients <- unique(rs_1005_base$USUBJID)
+
+# find all patients that participated in the study before screening
+rs_1005_base_check <- rs_1005 %>% filter(RSTEST == "NSAA1-Total", VISITNUM==0) %>% distinct(USUBJID, RSTEST, .keep_all = TRUE) 
+
+# this should be the same length as base_patients
+base_patients_check <- rs_1005_base_check$USUBJID
+
+# find all patients that were screened
+rs_1005_screened <- rs_1005 %>% filter(VISITNUM == 1)
+
+screened_patients <- unique(rs_1005_screened$USUBJID)
+
+# check if all base patients began screening
+print(length(intersect(base_patients, screened_patients)))
+# yes they did
+
+# find all patients that weren't removed from screening
+rs_1005_begin <- rs_1005 %>% filter(VISITNUM == 4)
+
+begin_patients <- unique(rs_1005_begin$USUBJID)
+
+# check if all base patients began the study
+print(length(intersect(base_patients, begin_patients)))
+# three patients failed screening
+
+failed_screen <- setdiff(base_patients, begin_patients)
+
+# find all patients that dropped out
+rs_1005_end <- rs_1005 %>% filter(VISITNUM == 99)
+
+dropout_patients = unique(rs_1005_end$USUBJID)
+
+# investigate how many of the patients that failed screening were given VN = 99
+print(length(intersect(failed_screen, dropout_patients)))
+# none of them
+# this is good
+# All patients that dropped out therefore will have VISITNUM >= 5
+```
+
+Idea: Iterate through the dropped out patients. Find their second largest visit number (x), as their largest will be 99, then change VISITNUM = 99 to VISITNUM = x+1
+
+```{r}
+for(patient_id in dropout_patients) {
+  # Find the second largest VISITNUM for the current patient excluding 99
+  second_largest_visitnum <- rs_1005 %>%
+    filter(USUBJID == patient_id, VISITNUM != 99) %>%
+    arrange(desc(VISITNUM)) %>%
+    slice(1) %>%
+    pull(VISITNUM)
+  
+  # Check if there is a valid second largest VISITNUM
+  if(length(second_largest_visitnum) > 0) {
+    # Update the VISITNUM from 99 to second largest + 1
+    rs_1005 <- rs_1005 %>%
+      mutate(VISITNUM = if_else(USUBJID == patient_id & VISITNUM == 99, second_largest_visitnum + 1, VISITNUM))
+  }
+}
+
+# This is just so that the visit numbers are from 0-9
+mapping <- setNames(c(0, 1, 2, 3, 4, 5, 6, 7, 8, 9), c(0, 1, 4, 5, 6, 7, 8, 9, 10, 11))
+
+rs_1005$VISITNUM <- mapping[as.character(rs_1005$VISITNUM)]
+```
+
+Now we get the matrix that we input into PCA from this
+
+```{r}
+# first we have to investigate all the factors that make up RSTEST column
+
+RSTEST_classes <- unique(rs_1005$RSTEST)
+
+# remove NSAA1_Total and NSAA1_Total Linearized
+totals_to_remove <- which(RSTEST_classes %in% c("NSAA1-Total", "NSAA1-Total Linearized"))
+
+RSTEST_classes <- RSTEST_classes[-totals_to_remove]
+
+# also remove any grades, timing and velocity results
+keywords_to_remove <- c("Velocity", "Time", "Grade")
+misc_to_remove <- grep(paste0(paste(keywords_to_remove, collapse = "|"), collapse = "|"), RSTEST_classes)
+
+RSTEST_classes <- RSTEST_classes[-misc_to_remove]
+
+RSTEST_list <- as.list(RSTEST_classes)
+
+rs_1005_restricted <- rs_1005_base %>% filter(RSTEST %in% RSTEST_list)
+
+# remove duplicated rows
+rs_1005_data <- rs_1005_restricted %>% distinct(USUBJID, RSTEST, 
+                                                .keep_all = TRUE)
+
+# use pivot wider to create the desired df
+rs_1005_pivot <- rs_1005_data %>% select(USUBJID, RSTEST, RSORRES) %>%
+  pivot_wider(id_cols = USUBJID,
+              names_from = RSTEST,
+              values_from = RSORRES)
+```
+
+Let's now extract the matrix and create a function which generalises this process for any VISITNUM.
+
+```{r}
+# convert to matrix removing the first column as that is subject ID
+X0 <- as.matrix(rs_1005_pivot[2:18])
+# fill na with mean value of the column
+X0 <- apply(X0, 2, as.numeric)
+column_means <- colMeans(X0, na.rm = TRUE) 
+X0[is.na(X0)] <- column_means[rep(1:ncol(X0), each = nrow(X0))]
+
+# define a function which does this for any VISITNUM
+create_matrix <- function(df, VN){
+  df_new <- df %>% filter(VISITNUM == VN)
+  RSTEST_classes <- unique(df$RSTEST)
+  totals_to_remove <- which(RSTEST_classes %in% c("NSAA1-Total", "NSAA1-Total Linearized"))
+  RSTEST_classes <- RSTEST_classes[-totals_to_remove]
+  keywords_to_remove <- c("Velocity", "Time", "Grade")
+  misc_to_remove <- grep(paste0(paste(keywords_to_remove, collapse = "|"), collapse = "|"), RSTEST_classes)
+
+  RSTEST_classes <- RSTEST_classes[-misc_to_remove]
+
+  RSTEST_list <- as.list(RSTEST_classes)
+
+  df_restricted <- df_new %>% filter(RSTEST %in% RSTEST_list)
+  df_data <- df_restricted %>% distinct(USUBJID, RSTEST, 
+                                                .keep_all = TRUE)
+  df_pivot <- df_data %>% select(USUBJID, RSTEST, RSORRES) %>%
+  pivot_wider(id_cols = USUBJID,
+              names_from = RSTEST,
+              values_from = RSORRES)
+  
+  X <- as.matrix(df_pivot[2:18])
+  X <- apply(X, 2, as.numeric)
+  column_means <- colMeans(X, na.rm = TRUE) 
+  X[is.na(X)] <- column_means[rep(1:ncol(X), each = nrow(X))]
+  return(X)
+}
+```
+
+Now we perform PCA, after constructing our matrix.
+
+Should we use scale = TRUE or scale = FALSE? scale = TRUE will standardize each feature or variable before we perform PCA. This can be particularly useful in certain cases, for instance if one variable takes larger values it will exhibit larger variance by nature, this then translates to it potentially falsely dominating PC1. To combat this, we standardize the data so that we have a “global” scale for all variables, i.e. the analysis will be invariant to the measurement scale.
+
+In this setting, we have that each component of the NSAA takes a value of 0, 1 or 2 and so are on the same scale. However, one task may be inherently easier to do than the other, and so has an abnormally higher frequency of 2s. So, to answer the question scale = TRUE or FALSE, we have to investigate the proportion of 0s, 1s and 2s for each component (outputted as barycentric coordinates), as well as the variance-covariance matrix to formulate a robust conclusion.
+
+```{r}
+# print out the variances from the covariance matrix
+print(diag(cov(X0))) # <- some evidence for scale=TRUE (variances of each component do be different).
+```
+
+```{r}
+# Calculate the counts for each RSORRES value within each RSTEST and VISITNUM group
+rs_1005_counts <- rs_1005 %>%
+  filter(RSTEST %in% RSTEST_list) %>%
+  group_by(RSTEST, VISITNUM, RSORRES) %>%
+  summarise(count = n(), .groups = 'drop')
+
+# Calculate the total counts for each RSTEST and VISITNUM group
+rs_1005_totals <- rs_1005_counts %>%
+  group_by(RSTEST, VISITNUM) %>%
+  summarise(total = sum(count), .groups = 'drop')
+
+# Join the counts with the totals to calculate proportions
+rs_1005_proportions <- rs_1005_counts %>%
+  left_join(rs_1005_totals, by = c("RSTEST", "VISITNUM")) %>%
+  mutate(proportion = count / total) %>%
+  select(RSTEST, VISITNUM, RSORRES, proportion)
+
+# Pivot the data to have one row per RSTEST and VISITNUM combination
+rs_1005_proportions <- rs_1005_proportions %>%
+  pivot_wider(names_from = RSORRES, values_from = proportion, values_fill = list(proportion = 0))
+```
+
+We want to plot the trajectories of each component on a barycentric plot
+
+```{r}
+plot_ternary <- function(test_component){
+rs_1005_bplot <- rs_1005_proportions %>% filter(RSTEST == test_component)
+
+plot <- ggtern(data = rs_1005_bplot, aes(x = `0`, y = `1`, z = `2`)) +
+  geom_point(aes(color = factor(VISITNUM)), size = 3) + geom_jitter() +
+  geom_path(arrow = arrow(type = "open", length = unit(0.15, "inches")),
+            color="blue", size = 0.5) +
+  theme_bw() + ggtitle(test_component) + 
+  labs(x = "0", y = "1", z = "2", color = "Visit Number") +
+  theme(
+    plot.title = element_text(hjust = 0.5),  # Center the title
+    legend.position = "right"
+  )
+return(plot)
+}
+
+for (test_component in RSTEST_classes){
+  plot <- plot_ternary(test_component)
+  print(plot)
+}
+```
+
+Now that we have reached a conclusion we will perform PCA using scale = TRUE!
+
+```{r, warning=FALSE}
+# apply PCA
+pca_result <- prcomp(X0, center = TRUE, scale. = TRUE) 
+
+S <- pca_result$sdev
+
+# scree plot
+plot(1:length(S), S^2, type = "b",
+     xlab = "Principal Component", ylab = "Eigenvalue",
+     main = "Scree Plot")
+
+# loadings
+loadings_matrix <- pca_result$rotation
+# the biplot shows that hop left and right are really correlated with one another
+# might be best to use one leg
+biplot(pca_result, cex = 0.7, arrow.len=0.001, scale = 0.8)
+print(loadings_matrix[,1:2])
+```
+
+```{r, warning=FALSE}
+# nicer plots
+pca_facto <- PCA(X0, graph = FALSE)
+
+fviz_screeplot(pca_facto, addlabels = TRUE, ylim = c(0, 100), 
+               main = "Scree Plot")
+
+# loadings matrix
+loadings_matrix_facto <- pca_facto$var$coord
+
+# biplot
+fviz_pca_biplot(pca_facto, geom = "point", col.var = "contrib", 
+                gradient.cols = rainbow(ncol(X0)), 
+                repel = TRUE, arrow.len = 0.001, 
+                label = "var", cex = 0.5)
+
+print(loadings_matrix_facto[, 1:2])
+```
+
+```{r, warning=FALSE}
+# plot trajectory of the weight for each component within PC1 and PC2 against time points
+
+num_vists = length(unique(rs_1005$VISITNUM))
+num_features = length(RSTEST_list)
+PC1s <- matrix(NA, nrow=num_features, ncol= num_vists)
+PC2s <- matrix(NA, nrow=num_features, ncol=num_vists)
+
+for (v in sort(unique(rs_1005$VISITNUM))){
+  print(v)
+  X <- create_matrix(rs_1005, v)
+  # used scale = FALSE because some columns were constant later on
+  pca <- PCA(X, graph = FALSE) 
+  PC1 <- pca$var$coord[ ,1]
+  PC2 <- pca$var$coord[ ,2]
+  PC1s[, v+1] <- PC1
+  PC2s[, v+1] <- PC2
+}
+
+plot(1:num_vists, PC1s[1, ], type = "l", col = 1, xlab = "Visit", ylab = "PC1", xlim = c(1, num_vists), ylim = range(PC1s), main = "PC1 Weights")
+
+# Add lines for the rest of the rows in PC1s
+for (row in 2:num_features) {
+  lines(1:num_vists, PC1s[row, ], col = row)
+}
+
+plot(1:num_vists, PC2s[1, ], type = "l", col = 1, xlab = "Visit", ylab = "PC1", xlim = c(1, num_vists), ylim = range(PC2s), main = "PC2 Weights")
+
+for (row in 2:num_features) {
+  lines(1:num_vists, PC2s[row, ], col = row)
+}
+
+# You're looking at how each variable loads onto the first two PCs and seeing how that loading varies with time. 
+# NSAA claims that we have a 1d measure of disease severity
+# do not look at VISITNUM=9 because there were only 3 patients remaining
+# might explain why a lot of components go to zero
+# the weights are probably only reliable until the 6th visit approx
+```
+
+```{r}
+# TO DO LIST
+# 1.) plot how the barycentric coordinates change with visit number
+
+# 2.) use nlme gls to estimate the correlation parameter - no need to worry about mean because we can add this on later - it doesn't affect correlation.
+
+# 3.) Perform latent class trajectory analysis on this data to see what was done in Muntoni et al - want to perform on each component trajectory as well as the trajectory of the total. 
+# to evaluate maybe use cross validation so first fit the model with a certain number of clusters and find and record what cluster each trajectory is classified to
+# then perform K-fold cross validation assess the accuracy - the proportion of trajectories correctly classified - average this across all K 
+# we can use this average accuracy to evaluate which model is best
+```
+
+```{r}
+#ggplot(data = rs_clean,
+       #mapping  = aes(x = VISITNUM ,
+                      #y = nsaa,
+                      #group = USUBJID)) + geom_line()
+```

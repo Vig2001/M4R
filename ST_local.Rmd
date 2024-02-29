@@ -1,0 +1,130 @@
+---
+output:
+  pdf_document: default
+  html_document: default
+---
+# MSci Project
+
+We start off by simulating trajectories using this model:
+
+$Y_{ij} = a + b t_j + c t_j^2 + \epsilon_{ij}$
+
+For this first task, we assume one cluster / class, here $i,j$ represent the individual and time point respectively. This is just for simplicity, and we can extend this later on. What I have done to begin with is:
+
+1. Create the mean trajectory of NSAA scores, by inspecting the graph given in the Natural History ... Paper
+
+2. Add in a random error so that we get rough individual trajectories.
+
+3. Accounted for correlation between errors at different time points for the same subject by using an AR(1) process.
+
+4. add treatment effect
+
+```{r}
+# point 1 -  we start from age 1 and end at age 16
+# from the graph we have that the average passes through points:
+# (4, 22), (8,24) and (12,12)
+# We get a = 6, b = 5.75, c = -0.4375
+
+m = function(x){
+  -0.4375*x^2 + 5.75*x + 6
+}
+
+# point 2, let's do 10 individual trajectories
+generateValues <- function() {
+  m_values <- m(1:16)
+  rnorm_values <- rnorm(16, mean = 0, sd = 2) # Adjust the standard deviation (sd) here
+  return(m_values + rnorm_values)
+}
+
+# create list of vectors
+NSAA <- lapply(1:10, function(i) generateValues())
+
+# create an AR(1) error correlation
+# Set the parameters for the AR(1) error correlation
+phi_error <- 0.5  # Autoregressive coefficient for the error
+sigma_error <- 2.5 # Standard deviation of the error
+errors_list <- vector("list", length = 10)
+
+for (i in 1:10) {
+  errors <- numeric(16)
+  NSAA_i = vector(length = 16)
+  error_t_minus_1 <- rnorm(1, mean = 0, sd = sigma_error)  # Initialize the error term
+  for (j in 1:16) {
+    val = max(m(j) + error_t_minus_1, 0)
+    errors[j] = val - m(j)
+    NSAA_i[j] = val
+    error_t <- phi_error * error_t_minus_1 + rnorm(1, mean = 0, sd = sigma_error)  # Update the error term
+    error_t_minus_1 <- error_t
+  }
+  NSAA[[i]] = NSAA_i
+  errors_list[[i]] <- errors
+}
+
+all_errors <- unlist(errors_list)
+pacf_errors <- pacf(all_errors, lag.max = 15, plot = FALSE)
+
+# Plot the individual trajectories with AR(1) error correlation
+plot(1:16, NSAA[[1]], type = 'l', xlab = 'Age', ylab = 'NSAA', main = 'Trajectories')
+
+# Loop through the remaining trajectories and add them to the existing plot
+for (i in 2:10) {
+  lines(1:16, NSAA[[i]], type = 'l', col = i)  # Use different colors for each trajectory
+}
+
+plot(pacf_errors, xlab = "Lag", ylab = "PACF", main = "Partial Autocorrelation of Errors")
+abline(h = 0, col = "red")
+# autocorrelation gives us some indication on how easily we can distinguish between whether the individual has been given treatment or not
+```
+
+I will now perform a hypothesis test on whether we can make the assumption that the final NSAA score from the "Natural History of Steroid-Treated Young Boys With Duchenne Muscular Dystrophy Using the NSAA" paper is equal to the sum of the baseline and the change over 12 months. All data used can be found in that paper.
+
+```{r}
+# age = 3 years
+# test statistic = 19.0 - 17.3 = 2.7
+# desired distribution is a normal with mean 3.8 and s.d. 5.6
+# H0: mu = 3.8 H1: mu != 3.8 (two-tailed test)
+# i.e. we are testing to see if the change between baseline 4 and 3 follows the same distribution as the change in NSAA over a 12 month period.
+# find the S^2  = (n_3 * S_3^2 + n_4 * S_4^2 + ...) / sum of n_i's
+# do hypothesis test for each age (comparing means) using S^2 divided by the sample sizes
+
+
+# n_3 = 18, n_4 = 40, n_5 = 35, n_6 = 35, n_7 = 30 (from article)
+# S_3.= 4.7^2, ... also from Natural History Article
+S_squared = (18 * 4.7^2 + 40 * 4.4^2 + 35 * 3.7^2
+             + 35 * 6.6^2 + 30 * 5.5^2) / (18 + 40
+                                           + 35 + 35 + 30)
+
+mean_change_3 = 3.8
+var_mean_change_3 = 5.6
+base_4 = 19.0
+base_3 = 17.3
+base_change_34 = base_4 - base_3
+var_base_change_34 = S_squared / (40 + 18)
+alpha = 0.05 # significance level
+ 
+p = dnorm(mean_change_3 - base_change_34, mean=0, 
+          sd=sqrt(var_mean_change_3 + var_base_change_34))
+if(p<alpha / 2){
+  print("observed value is significant - enough evidence to reject H0.")
+} else{
+print("Not enough evidence to reject H0 at this significance level.")
+}
+print(p)
+
+# then do weighted regression between the mean change and the base change.
+# create data frame with all the data points from the Natural History Article
+
+df <- data.frame(age=c(3,4,5,6), base_change=c(1.7, 2.7, 1.4, -0.6),
+                mean_change=c(3.8, 3.2, 0.5, -0.5))
+
+# define weights
+sizes = c(6, 20 ,22, 15)
+ws = sizes
+
+NSAA_lm <- lm(mean_change~base_change, data = df, weights = ws)
+summary(NSAA_lm)
+plot(NSAA_lm[2]) #QQ-plot of standardized residuals
+
+# QQ-plot shows that standardized residuals roughly follow a N(0,1) distribution
+# Indicates a good model, hence we can estimate mean_change by the base_change
+```
