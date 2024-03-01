@@ -314,6 +314,10 @@ for (row in 2:num_features) {
 # do not look at VISITNUM=9 because there were only 3 patients remaining
 # might explain why a lot of components go to zero
 # the weights are probably only reliable until the 6th visit approx
+<<<<<<< HEAD
+=======
+
+>>>>>>> 126a0cf (Updated Comments After 01/03 Meeting)
 # add grey bard to the bottom of the plot to show how many individuals at each time point
 # or do Klaman filter to perform dynamic PCA !!
 ```
