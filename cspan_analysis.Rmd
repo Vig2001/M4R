@@ -214,7 +214,7 @@ rs_1005_proportions <- rs_1005_proportions %>%
 
 We want to plot the trajectories of each component on a barycentric plot
 
-```{r}
+```{r, warning=FALSE}
 plot_ternary <- function(test_component){
 rs_1005_bplot <- rs_1005_proportions %>% filter(RSTEST == test_component)
 
@@ -314,18 +314,28 @@ for (row in 2:num_features) {
 # do not look at VISITNUM=9 because there were only 3 patients remaining
 # might explain why a lot of components go to zero
 # the weights are probably only reliable until the 6th visit approx
+# add grey bard to the bottom of the plot to show how many individuals at each time point
+# or do Klaman filter to perform dynamic PCA !!
 ```
 
 ```{r}
 # TO DO LIST
-# 1.) plot how the barycentric coordinates change with visit number
 
 # 2.) use nlme gls to estimate the correlation parameter - no need to worry about mean because we can add this on later - it doesn't affect correlation.
+
+# model would be RSORRES ~ 1 + (time in weeks - check for each visitnum) + (time in weeks) ** 2 + AR(1)
 
 # 3.) Perform latent class trajectory analysis on this data to see what was done in Muntoni et al - want to perform on each component trajectory as well as the trajectory of the total. 
 # to evaluate maybe use cross validation so first fit the model with a certain number of clusters and find and record what cluster each trajectory is classified to
 # then perform K-fold cross validation assess the accuracy - the proportion of trajectories correctly classified - average this across all K 
 # we can use this average accuracy to evaluate which model is best
+
+# Ways to deal with different sizes of trajectories (because of dropout)
+# simplest - just perform analysis on complete trajectories but only 3
+# assign last value for the rest of time to complete incomplete trajectories
+# assign average for the rest of time to complete incomplete trajectories
+
+# cluster validation is a method which could be the same as that described above - look up the silhouette score!
 ```
 
 ```{r}
