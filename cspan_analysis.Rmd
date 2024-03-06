@@ -362,7 +362,14 @@ rs_1005_nsaa <- rs_1005_nsaa %>%
 # remove duplicated rows
 rs_1005_nsaa <- rs_1005_nsaa %>% distinct(USUBJID, VISIT, 
                                                 .keep_all = TRUE)
+
+# make RSORRES numeric
+rs_1005_nsaa$RSORRES <- as.numeric(rs_1005_nsaa$RSORRES)
+
+# model grouped by each patient so different patients aren't correlated
 nsaa_total_gls <- gls(RSORRES ~ 1 + VISIT + VISIT**2, 
                       data = rs_1005_nsaa, 
-                      correlation = corAR1(form = ~ VISIT | USUBJID))
+                      correlation = corAR1(form = ~ 1 | USUBJID))
+
+summary(nsaa_total_gls)
 ```
