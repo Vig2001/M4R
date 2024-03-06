@@ -373,3 +373,9 @@ nsaa_total_gls <- gls(RSORRES ~ 1 + VISIT + VISIT**2,
 
 summary(nsaa_total_gls)
 ```
+
+
+The negative correlation for VISIT in the context of the model indicates that as time progresses (as indicated by the VISIT variable), the response variable (RSORRES) is expected to decrease, adjusting for the time modeled. This adjustment means that the model accounts for changes over time in RSORRES, predicting its value based on the passage of time (represented by VISIT), while controlling for individual variability across subjects (USUBJID). The model suggests that each additional unit increase in VISIT is associated with a decrease in the expected value of RSORRES, after accounting for the autocorrelation in the data as indicated by the AR(1) structure.
+
+
+The summary indicates an AR(1) correlation structure in your GLS model, with a high phi estimate of 0.9639783, suggesting strong serial correlation.
