@@ -30,6 +30,11 @@ Chris' snippet of code
                           #RSTEST == "NSAA1-Total",
                           #VISITNUM <= 15) 
 #rs_clean$nsaa <- as.numeric(rs_clean$RSORRES)
+
+#ggplot(data = rs_clean,
+       #mapping  = aes(x = VISITNUM ,
+                      #y = nsaa,
+                      #group = USUBJID)) + geom_line()
 ```
 
 Now we perform some data analysis. Firstly, we only obtain data which belong to the study DMD-1005. We then filter so that we only get values of each NSAA component at baseline for each patient. The VISITNUM are in a nonsensical order because some patients are assigned a visit number of 99. This has to be investigated - hypothesis is that the patients which were assigned a VISITNUM of 99 did not make it past screening.
@@ -286,7 +291,6 @@ PC1s <- matrix(NA, nrow=num_features, ncol= num_vists)
 PC2s <- matrix(NA, nrow=num_features, ncol=num_vists)
 
 for (v in sort(unique(rs_1005$VISITNUM))){
-  print(v)
   X <- create_matrix(rs_1005, v)
   # used scale = FALSE because some columns were constant later on
   pca <- PCA(X, graph = FALSE) 
@@ -314,37 +318,51 @@ for (row in 2:num_features) {
 # do not look at VISITNUM=9 because there were only 3 patients remaining
 # might explain why a lot of components go to zero
 # the weights are probably only reliable until the 6th visit approx
-<<<<<<< HEAD
-=======
-
->>>>>>> 126a0cf (Updated Comments After 01/03 Meeting)
-# add grey bard to the bottom of the plot to show how many individuals at each time point
-# or do Klaman filter to perform dynamic PCA !!
 ```
 
 ```{r}
 # TO DO LIST
 
-# 2.) use nlme gls to estimate the correlation parameter - no need to worry about mean because we can add this on later - it doesn't affect correlation.
+# 1.) use nlme gls to estimate the correlation parameter - no need to worry about mean because we can add this on later - it doesn't affect correlation.
 
-# model would be RSORRES ~ 1 + (time in weeks - check for each visitnum) + (time in weeks) ** 2 + AR(1)
+# model would be RSORRES ~ 1 + (time in weeks - check for each visitnum) + (time in weeks) ** 2 + AR(1) correlation structure
 
-# 3.) Perform latent class trajectory analysis on this data to see what was done in Muntoni et al - want to perform on each component trajectory as well as the trajectory of the total. 
+# 2.) Perform latent class trajectory analysis on this data to see what was done in Muntoni et al - want to perform on each component trajectory as well as the trajectory of the total. 
 # to evaluate maybe use cross validation so first fit the model with a certain number of clusters and find and record what cluster each trajectory is classified to
 # then perform K-fold cross validation assess the accuracy - the proportion of trajectories correctly classified - average this across all K 
 # we can use this average accuracy to evaluate which model is best
 
-# Ways to deal with different sizes of trajectories (because of dropout)
+# cluster validation is a method which could be the same as that described above - look up the silhouette score!
+
+# 3.) Ways to deal with different sizes of trajectories (because of dropout)
 # simplest - just perform analysis on complete trajectories but only 3
 # assign last value for the rest of time to complete incomplete trajectories
 # assign average for the rest of time to complete incomplete trajectories
 
-# cluster validation is a method which could be the same as that described above - look up the silhouette score!
+# 4.) Add grey bard to the bottom of the plot to show how many individuals at each time point
+# or do Kalman filter to perform dynamic PCA - we have weights from PCA at visit 1 then we update them for visit 2 based on the information given
 ```
 
+We calculate the correlation parameter using gls on the total NSAA score.
 ```{r}
-#ggplot(data = rs_clean,
-       #mapping  = aes(x = VISITNUM ,
-                      #y = nsaa,
-                      #group = USUBJID)) + geom_line()
+# get dataset of only NSAA
+rs_1005_nsaa <- rs_1005 %>% filter(RSTEST == "NSAA1-Total")
+# change the visit column so that it records integer times
+# baseline and screening are given a time stamp of 0 weeks
+# every other time stamp is (n-1) * 12 weeks
+rs_1005_nsaa <- rs_1005_nsaa %>%
+  mutate(VISIT = case_when(
+    VISITNUM %in% c(0, 1) ~ 0,
+    VISITNUM >= 2 & VISITNUM <= 9 ~ (VISITNUM - 1) * 12,
+    TRUE ~ NA_real_ # This line handles any VISITNUM values outside 0-9
+  ))
+# now we can define the gls model
+# we use corAR1 instead of corCAR1 because weeks would be discrete - need to ask chris about this
+
+# remove duplicated rows
+rs_1005_nsaa <- rs_1005_nsaa %>% distinct(USUBJID, VISIT, 
+                                                .keep_all = TRUE)
+nsaa_total_gls <- gls(RSORRES ~ 1 + VISIT + VISIT**2, 
+                      data = rs_1005_nsaa, 
+                      correlation = corAR1(form = ~ VISIT | USUBJID))
 ```
