@@ -372,6 +372,13 @@ nsaa_total_gls <- gls(RSORRES ~ 1 + VISIT + VISIT**2,
                       correlation = corAR1(form = ~ 1 | USUBJID))
 
 summary(nsaa_total_gls)
+# get residuals
+# check autocorrelation within residuals (get autocorrelation by subject)
+# check if there is clustering within the residuals of the gls - it might give some indication of grouping / clustering
+# we assume no grouping when using this model - maybe if there is clustering in the residuals we might need to use a mixed model - also use LCTM to justify this if necessary
+# need to make sure that the epsilon and random effects are uncorrelated - enforce this - research why this is necessary or something we want
+# bootstrap fitting this model and extract the visit correlation coefficient and plot a histogram to see its distribution - if it is centered around zero then we need to remove it. Also get the phi parameter and see its distribution.
+# fit the model without ar1 correlation - then plot the residuals and check its autocorrelation using a lag (t+1 vs t) plot.
 ```
 
 
