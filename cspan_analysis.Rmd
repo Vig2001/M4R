@@ -332,14 +332,16 @@ for (row in 2:num_features) {
 # then perform K-fold cross validation assess the accuracy - the proportion of trajectories correctly classified - average this across all K 
 # we can use this average accuracy to evaluate which model is best
 
-# cluster validation is a method which could be the same as that described above - look up the silhouette score!
+# cluster validation is a method which could be the same as that described above - look up the silhouette score or cosine similarity
 
-# 3.) Ways to deal with different sizes of trajectories (because of dropout)
-# simplest - just perform analysis on complete trajectories but only 3
+# (Ways to deal with different sizes of trajectories (because of dropout)
+# simplest - just perform analysis on complete trajectories but only 3 individuals have complete trajectories
 # assign last value for the rest of time to complete incomplete trajectories
-# assign average for the rest of time to complete incomplete trajectories
+# assign average for the rest of time to complete incomplete trajectories <- this might be the best approach of a bad bunch
+# I am envisioning a matrix which contains the trajectories so the values across time for each USUBJID (for a specific RSTEST) and for NA values we assing the mean of the column) <- THIS MAY NOT EVEN BE REQUIRED
 
-# 4.) Add grey bard to the bottom of the plot to show how many individuals at each time point
+
+# 4.) Add grey bar to the bottom of the plot to show how many individuals at each time point
 # or do Kalman filter to perform dynamic PCA - we have weights from PCA at visit 1 then we update them for visit 2 based on the information given
 ```
 
