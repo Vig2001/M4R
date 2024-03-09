@@ -11,7 +11,7 @@ $Y_{ij} = a + b t_j + c t_j^2 + \epsilon_{ij}$
 
 For this first task, we assume one cluster / class, here $i,j$ represent the individual and time point respectively. This is just for simplicity, and we can extend this later on. What I have done to begin with is:
 
-1. Create the mean trajectory of NSAA scores, by inspecting the graph given in the Natural History ... Paper
+1. Create the mean trajectory of NSAA scores, by inspecting the graph given in the Natural History Paper
 
 2. Add in a random error so that we get rough individual trajectories.
 
