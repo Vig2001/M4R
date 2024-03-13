@@ -19,8 +19,8 @@ library(dplyr)
 library(ggtern)
 library(factoextra)
 library(nlme)
+library(forecast)
 rs <- read_csv("rs.csv")
-#View(rs)
 ```
 
 Chris' snippet of code
@@ -360,8 +360,9 @@ rs_1005_nsaa <- rs_1005_nsaa %>%
   mutate(VISIT = case_when(
     VISITNUM %in% c(0, 1) ~ 0,
     VISITNUM >= 2 & VISITNUM <= 9 ~ (VISITNUM - 1) * 12,
-    TRUE ~ NA_real_ # This line handles any VISITNUM values outside 0-9
+    TRUE ~ NA_real_
   ))
+
 # now we can define the gls model
 # we use corAR1 instead of corCAR1 because weeks would be discrete - need to ask chris about this
 
@@ -379,16 +380,32 @@ nsaa_total_gls <- gls(RSORRES ~ 1 + VISIT + VISIT**2,
                       data = rs_1005_nsaa, 
                       correlation = corAR1(form = ~ 1 | USUBJID))
 
+# output the phi parameter
 summary(nsaa_total_gls)
-# plots the residuals for every visit
-plot(nsaa_total_gls, resid(., type="p")~fitted(.)|VISIT, abline=0)
-# get residuals
-# check autocorrelation within residuals (get autocorrelation by subject)
+
+# plot the residuals for every visit
 # check if there is clustering within the residuals of the gls - it might give some indication of grouping / clustering
-# we assume no grouping when using this model - maybe if there is clustering in the residuals we might need to use a mixed model - also use LCTM to justify this if necessary
+# we assume no grouping when using this model - maybe if there is clustering in the residuals we might need to use a mixed model.
+plot(nsaa_total_gls, resid(., type="p")~fitted(.)|VISIT, abline=0)
+
+# check autocorrelation within residuals for a random subject
+residuals_data <- data.frame(residuals = residuals(nsaa_total_gls),
+                             USUBJID = rs_1005_nsaa$USUBJID)
+random_subject <- sample(unique(residuals_data$USUBJID), 1)
+subject_residuals <- subset(residuals_data,
+                            USUBJID == random_subject)$residuals
+# plot PACF
+pacf(subject_residuals, main=paste("PACF for Subject", random_subject))
+
 # need to make sure that the epsilon and random effects are uncorrelated - enforce this - research why this is necessary or something we want
 # bootstrap fitting this model and extract the visit correlation coefficient and plot a histogram to see its distribution - if it is centered around zero then we need to remove it. Also get the phi parameter and see its distribution.
-# fit the model without ar1 correlation - then plot the residuals and check its autocorrelation using a lag (t+1 vs t) plot.
+
+# fit the model without ar1 correlation - then plot the residuals and check its autocorrelation.
+nsaa_uncorrelated_gls <- gls(RSORRES ~ 1 + VISIT + VISIT**2,
+                             data = rs_1005_nsaa)
+residuals_nsaa <- residuals(nsaa_uncorrelated_gls)
+pacf(residuals_nsaa, lag.max=10, main="PACF of Uncorrelated Residuals")
+
 ```
 
 Let's interpret the standardised residuals vs the fitted values graph - it illustrates the grouping structure by visit very clearly. Fitted values in this sense is the NSAA total score - so time essentially is moving in the reverse direction to the fitted values such that the last vertical line of points represents the baseline measurement. The standardized residuals follow a standard normal distribution for each visit which may indicate no obvious grouping structure of subjects through time. For an obvious grouping structure we would've expected certain residual points being clustered together at each visit point, but this is not completely obvious.
