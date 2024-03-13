@@ -381,12 +381,18 @@ nsaa_total_gls <- gls(RSORRES ~ 1 + VISIT + VISIT**2,
                       correlation = corAR1(form = ~ 1 | USUBJID))
 
 # output the phi parameter
+# need to make sure that the epsilon and random effects are uncorrelated - enforce this - research why this is necessary or something we want
+# bootstrap fitting this model and extract the visit correlation coefficient and plot a histogram to see its distribution - if it is centered around zero then we need to remove it. Also get the phi parameter and see its distribution.
 summary(nsaa_total_gls)
 
+# plot the residuals as a whole
+plot(nsaa_total_gls, resid(., type="p")~fitted(.), abline=0)
 # plot the residuals for every visit
-# check if there is clustering within the residuals of the gls - it might give some indication of grouping / clustering
+# check if there is clustering within the residuals
 # we assume no grouping when using this model - maybe if there is clustering in the residuals we might need to use a mixed model.
 plot(nsaa_total_gls, resid(., type="p")~fitted(.)|VISIT, abline=0)
+# qqnorm to see if standardized residuals are standard normal
+qqnorm(nsaa_total_gls, abline=c(0,1))
 
 # check autocorrelation within residuals for a random subject
 residuals_data <- data.frame(residuals = residuals(nsaa_total_gls),
@@ -394,22 +400,22 @@ residuals_data <- data.frame(residuals = residuals(nsaa_total_gls),
 random_subject <- sample(unique(residuals_data$USUBJID), 1)
 subject_residuals <- subset(residuals_data,
                             USUBJID == random_subject)$residuals
-# plot PACF
-pacf(subject_residuals, main=paste("PACF for Subject", random_subject))
 
-# need to make sure that the epsilon and random effects are uncorrelated - enforce this - research why this is necessary or something we want
-# bootstrap fitting this model and extract the visit correlation coefficient and plot a histogram to see its distribution - if it is centered around zero then we need to remove it. Also get the phi parameter and see its distribution.
+# plot PACF
+# We cannot derive a correlation structure based off the PACF
+# The PACF for each individual changes
+# Moroever the correlation values themselves at certain lag points aren't significant enough to draw a conclusion from
+pacf(subject_residuals, main=paste("PACF for Subject", random_subject))
 
 # fit the model without ar1 correlation - then plot the residuals and check its autocorrelation.
 nsaa_uncorrelated_gls <- gls(RSORRES ~ 1 + VISIT + VISIT**2,
                              data = rs_1005_nsaa)
 residuals_nsaa <- residuals(nsaa_uncorrelated_gls)
+# Can clearly observe a lag 1 correlation structure which is encapsulated by the AR1 in our original model.
 pacf(residuals_nsaa, lag.max=10, main="PACF of Uncorrelated Residuals")
 ```
+The summary indicates an AR(1) correlation structure in your GLS model, with a high phi estimate of 0.9639783, suggesting strong correlation between the nsaa scores of a single patient between two visits (i.e. 12 weeks apart).
 
-Let's interpret the standardised residuals vs the fitted values graph - it illustrates the grouping structure by visit very clearly. Fitted values in this sense is the NSAA total score - so time essentially is moving in the reverse direction to the fitted values such that the last vertical line of points represents the baseline measurement. The standardized residuals follow a standard normal distribution for each visit which may indicate no obvious grouping structure of subjects through time. For an obvious grouping structure we would've expected certain residual points being clustered together at each visit point, but this is not completely obvious.
+The negative correlation for VISIT outputted by the summary signifies the correlation between the random effects and the error of each observation. The random effects in the model (as specified above) is the patients themselves i.e. the only grouping structure we hypothesize is groups containing one patient each. Ideally this should be zero because the error in an NSAA measurement at a particular time of a particular patient should not be correlated to the patient that the measurement comes from (random effect).
 
-The negative correlation for VISIT in the context of the model indicates that as time progresses (as indicated by the VISIT variable), the response variable (RSORRES) is expected to decrease, adjusting for the time modeled. This adjustment means that the model accounts for changes over time in RSORRES, predicting its value based on the passage of time (represented by VISIT), while controlling for individual variability across subjects (USUBJID). The model suggests that each additional unit increase in VISIT is associated with a decrease in the expected value of RSORRES, after accounting for the autocorrelation in the data as indicated by the AR(1) structure.
-
-
-The summary indicates an AR(1) correlation structure in your GLS model, with a high phi estimate of 0.9639783, suggesting strong correlation between the nsaa score of a single patient between two visits (i.e. 12 weeks apart).
+Let's interpret the standardized residuals analysis. Upon analysing both standardized residuals vs the fitted values graphs with and without the VISIT grouping structure, we can conclude that there is no obvious grouping of subjects through time i.e. not enough evidence to suggest a clustering of trajectories. The fitted values in this sense are the NSAA total scores - so one can visualise time essentially moving in the reverse direction to the fitted values such that the last vertical line of points represents the baseline measurement. We can make this deduction by examining the plots for each VISIT - by comparing the sets of plots with the "overarching" plot we can see that each VISIT make up the vertical "pillars" observed. The standardized residuals follow a standard normal distribution for each visit (as illustrated by the qqnorm plot) which backs our model specification and once again undermines the clustering claim. For an obvious grouping structure to be present we would've expected certain residual points being bunched up together at each visit point, but this is not completely obvious from the plots and would've drastically affected the qqnorm plot. 
