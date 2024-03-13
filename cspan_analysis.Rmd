@@ -285,34 +285,42 @@ print(loadings_matrix_facto[, 1:2])
 ```{r, warning=FALSE}
 # plot trajectory of the weight for each component within PC1 and PC2 against time points
 
-num_vists = length(unique(rs_1005$VISITNUM))
+num_visits = length(unique(rs_1005$VISITNUM))
 num_features = length(RSTEST_list)
-PC1s <- matrix(NA, nrow=num_features, ncol= num_vists)
-PC2s <- matrix(NA, nrow=num_features, ncol=num_vists)
+PC1s <- matrix(NA, nrow=num_features, ncol= num_visits)
+PC2s <- matrix(NA, nrow=num_features, ncol=num_visits)
+num_points <- rep.int(0, times=num_visits)
 
 for (v in sort(unique(rs_1005$VISITNUM))){
   X <- create_matrix(rs_1005, v)
-  # used scale = FALSE because some columns were constant later on
   pca <- PCA(X, graph = FALSE) 
   PC1 <- pca$var$coord[ ,1]
   PC2 <- pca$var$coord[ ,2]
   PC1s[, v+1] <- PC1
   PC2s[, v+1] <- PC2
+  num_points[v+1] <- nrow(X)
 }
 
-plot(1:num_vists, PC1s[1, ], type = "l", col = 1, xlab = "Visit", ylab = "PC1", xlim = c(1, num_vists), ylim = range(PC1s), main = "PC1 Weights")
-
-# Add lines for the rest of the rows in PC1s
+# PC1s
+plot(1:num_visits, PC1s[1, ], type = "l", col = 1, xlab = "Visit", ylab = "PC1", xlim = c(1, num_visits), ylim = range(PC1s), main = "PC1 Weights")
 for (row in 2:num_features) {
-  lines(1:num_vists, PC1s[row, ], col = row)
+  lines(1:num_visits, PC1s[row, ], col = row)
 }
 
-plot(1:num_vists, PC2s[1, ], type = "l", col = 1, xlab = "Visit", ylab = "PC1", xlim = c(1, num_vists), ylim = range(PC2s), main = "PC2 Weights")
+# Bars to illustrate the number of data points at each VISITNUM
+par(new = TRUE)
+barplot(height = num_points, width = 0.1, col=rgb(0.5, 0.5, 0.5, 0.5), space = 0.05, axes = FALSE)
+axis(side = 4, at = axTicks(4), labels = axTicks(4))
+
+plot(1:num_visits, PC2s[1, ], type = "l", col = 1, xlab = "Visit", ylab = "PC2", xlim = c(1, num_visits), ylim = range(PC2s), main = "PC2 Weights")
 
 for (row in 2:num_features) {
-  lines(1:num_vists, PC2s[row, ], col = row)
+  lines(1:num_visits, PC2s[row, ], col = row)
 }
 
+par(new = TRUE)
+barplot(height = num_points, width = 0.1, col=rgb(0.5, 0.5, 0.5, 0.5), space = 0.05, axes = FALSE)
+axis(side = 4, at = axTicks(4), labels = axTicks(4))
 # You're looking at how each variable loads onto the first two PCs and seeing how that loading varies with time. 
 # NSAA claims that we have a 1d measure of disease severity
 # do not look at VISITNUM=9 because there were only 3 patients remaining
@@ -323,9 +331,7 @@ for (row in 2:num_features) {
 ```{r}
 # TO DO LIST
 
-# 1.) use nlme gls to estimate the correlation parameter - no need to worry about mean because we can add this on later - it doesn't affect correlation.
-
-# model would be RSORRES ~ 1 + (time in weeks - check for each visitnum) + (time in weeks) ** 2 + AR(1) correlation structure
+# 1.) perform bootstrap on the gls model to see the histogram of values that the phi parameter takes, but also to investigate whether the correlation between the random effects and the error in the model is significant - gls assumes that they can be correlated which isn't 
 
 # 2.) Perform latent class trajectory analysis on this data to see what was done in Muntoni et al - want to perform on each component trajectory as well as the trajectory of the total. 
 # to evaluate maybe use cross validation so first fit the model with a certain number of clusters and find and record what cluster each trajectory is classified to
@@ -341,8 +347,9 @@ for (row in 2:num_features) {
 # I am envisioning a matrix which contains the trajectories so the values across time for each USUBJID (for a specific RSTEST) and for NA values we assing the mean of the column) <- THIS MAY NOT EVEN BE REQUIRED
 
 
-# 4.) Add grey bar to the bottom of the plot to show how many individuals at each time point
-# or do Kalman filter to perform dynamic PCA - we have weights from PCA at visit 1 then we update them for visit 2 based on the information given
+# 3.) Add grey bar to the bottom of the plot to show how many individuals at each time point
+
+# 4.) Use the Kalman filter to perform dynamic PCA - we have weights from PCA at visit 1 then we update them for visit 2 based on the information from PCA
 ```
 
 We calculate the correlation parameter using gls on the total NSAA score.
