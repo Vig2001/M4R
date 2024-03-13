@@ -368,12 +368,16 @@ rs_1005_nsaa <- rs_1005_nsaa %>% distinct(USUBJID, VISIT,
 # make RSORRES numeric
 rs_1005_nsaa$RSORRES <- as.numeric(rs_1005_nsaa$RSORRES)
 
+# perform bootstrap
+
 # model grouped by each patient so different patients aren't correlated
 nsaa_total_gls <- gls(RSORRES ~ 1 + VISIT + VISIT**2, 
                       data = rs_1005_nsaa, 
                       correlation = corAR1(form = ~ 1 | USUBJID))
 
 summary(nsaa_total_gls)
+# plots the residuals for every visit
+plot(nsaa_total_gls, resid(., type="p")~fitted(.)|VISIT, abline=0)
 # get residuals
 # check autocorrelation within residuals (get autocorrelation by subject)
 # check if there is clustering within the residuals of the gls - it might give some indication of grouping / clustering
@@ -383,8 +387,9 @@ summary(nsaa_total_gls)
 # fit the model without ar1 correlation - then plot the residuals and check its autocorrelation using a lag (t+1 vs t) plot.
 ```
 
+Let's interpret the standardised residuals vs the fitted values graph - it illustrates the grouping structure by visit very clearly. Fitted values in this sense is the NSAA total score - so time essentially is moving in the reverse direction to the fitted values such that the last vertical line of points represents the baseline measurement. The standardized residuals follow a standard normal distribution for each visit which may indicate no obvious grouping structure of subjects through time. For an obvious grouping structure we would've expected certain residual points being clustered together at each visit point, but this is not completely obvious.
 
 The negative correlation for VISIT in the context of the model indicates that as time progresses (as indicated by the VISIT variable), the response variable (RSORRES) is expected to decrease, adjusting for the time modeled. This adjustment means that the model accounts for changes over time in RSORRES, predicting its value based on the passage of time (represented by VISIT), while controlling for individual variability across subjects (USUBJID). The model suggests that each additional unit increase in VISIT is associated with a decrease in the expected value of RSORRES, after accounting for the autocorrelation in the data as indicated by the AR(1) structure.
 
 
-The summary indicates an AR(1) correlation structure in your GLS model, with a high phi estimate of 0.9639783, suggesting strong serial correlation.
+The summary indicates an AR(1) correlation structure in your GLS model, with a high phi estimate of 0.9639783, suggesting strong correlation between the nsaa score of a single patient between two visits (i.e. 12 weeks apart).
