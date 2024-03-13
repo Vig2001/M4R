@@ -405,7 +405,6 @@ nsaa_uncorrelated_gls <- gls(RSORRES ~ 1 + VISIT + VISIT**2,
                              data = rs_1005_nsaa)
 residuals_nsaa <- residuals(nsaa_uncorrelated_gls)
 pacf(residuals_nsaa, lag.max=10, main="PACF of Uncorrelated Residuals")
-
 ```
 
 Let's interpret the standardised residuals vs the fitted values graph - it illustrates the grouping structure by visit very clearly. Fitted values in this sense is the NSAA total score - so time essentially is moving in the reverse direction to the fitted values such that the last vertical line of points represents the baseline measurement. The standardized residuals follow a standard normal distribution for each visit which may indicate no obvious grouping structure of subjects through time. For an obvious grouping structure we would've expected certain residual points being clustered together at each visit point, but this is not completely obvious.
