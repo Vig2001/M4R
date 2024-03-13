@@ -344,12 +344,9 @@ axis(side = 4, at = axTicks(4), labels = axTicks(4))
 # simplest - just perform analysis on complete trajectories but only 3 individuals have complete trajectories
 # assign last value for the rest of time to complete incomplete trajectories
 # assign average for the rest of time to complete incomplete trajectories <- this might be the best approach of a bad bunch
-# I am envisioning a matrix which contains the trajectories so the values across time for each USUBJID (for a specific RSTEST) and for NA values we assing the mean of the column) <- THIS MAY NOT EVEN BE REQUIRED
+# I am envisioning a matrix which contains the trajectories so the values across time for each USUBJID (for a specific RSTEST) and for NA values we assign the mean of the column)
 
-
-# 3.) Add grey bar to the bottom of the plot to show how many individuals at each time point
-
-# 4.) Use the Kalman filter to perform dynamic PCA - we have weights from PCA at visit 1 then we update them for visit 2 based on the information from PCA
+# 3.) Use the Kalman filter to perform dynamic PCA - we have weights from PCA at visit 1 then we update them for visit 2 based on the information from PCA
 ```
 
 We calculate the correlation parameter using gls on the total NSAA score.
