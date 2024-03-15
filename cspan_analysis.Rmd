@@ -327,7 +327,7 @@ axis(side = 4, at = axTicks(4), labels = axTicks(4))
 # might explain why a lot of components go to zero
 # the weights are probably only reliable until the 6th visit approx
 ```
-
+These plots show that when we do scale adding the components equally makes sense, but what is currently being done is not accounting for the variances of each component! maybe plot this when scale=FALSE.
 ```{r}
 # TO DO LIST
 
@@ -373,6 +373,8 @@ rs_1005_nsaa <- rs_1005_nsaa %>% distinct(USUBJID, VISIT,
 # make RSORRES numeric
 rs_1005_nsaa$RSORRES <- as.numeric(rs_1005_nsaa$RSORRES)
 
+rs_1005_nsaa$VISIT <- rs_1005_nsaa$VISIT - mean(rs_1005_nsaa$VISIT)
+
 # perform bootstrap
 
 # model grouped by each patient so different patients aren't correlated
@@ -381,9 +383,9 @@ nsaa_total_gls <- gls(RSORRES ~ 1 + VISIT + VISIT**2,
                       correlation = corAR1(form = ~ 1 | USUBJID))
 
 # output the phi parameter
-# need to make sure that the epsilon and random effects are uncorrelated - enforce this - research why this is necessary or something we want
-# bootstrap fitting this model and extract the visit correlation coefficient and plot a histogram to see its distribution - if it is centered around zero then we need to remove it. Also get the phi parameter and see its distribution.
-summary(nsaa_total_gls)
+# centre visit in the dataset <- the correlation under visit is just the correlation between visit and the intercept.
+nsaa_total_gls_sum <- summary(nsaa_total_gls)
+print(nsaa_total_gls_sum)
 
 # plot the residuals as a whole
 plot(nsaa_total_gls, resid(., type="p")~fitted(.), abline=0)
@@ -419,3 +421,7 @@ The summary indicates an AR(1) correlation structure in your GLS model, with a h
 The negative correlation for VISIT outputted by the summary signifies the correlation between the random effects and the error of each observation. The random effects in the model (as specified above) is the patients themselves i.e. the only grouping structure we hypothesize is groups containing one patient each. Ideally this should be zero because the error in an NSAA measurement at a particular time of a particular patient should not be correlated to the patient that the measurement comes from (random effect).
 
 Let's interpret the standardized residuals analysis. Upon analysing both standardized residuals vs the fitted values graphs with and without the VISIT grouping structure, we can conclude that there is no obvious grouping of subjects through time i.e. not enough evidence to suggest a clustering of trajectories. The fitted values in this sense are the NSAA total scores - so one can visualise time essentially moving in the reverse direction to the fitted values such that the last vertical line of points represents the baseline measurement. We can make this deduction by examining the plots for each VISIT - by comparing the sets of plots with the "overarching" plot we can see that each VISIT make up the vertical "pillars" observed. The standardized residuals follow a standard normal distribution for each visit (as illustrated by the qqnorm plot) which backs our model specification and once again undermines the clustering claim. For an obvious grouping structure to be present we would've expected certain residual points being bunched up together at each visit point, but this is not completely obvious from the plots and would've drastically affected the qqnorm plot. 
+
+The deliverable - if we have a treatment effect which causes an improvement in the NSAA by 'x' amount how many patients do we need in the trial?
+
+How does clustering relate to this? If we have clusters then the model will change and the treatment effect may be different between clusters - so we performed clustering as a sense check to see if there is a meaningful way to separate the patients - idea for further work.
