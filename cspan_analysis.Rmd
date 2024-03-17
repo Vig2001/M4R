@@ -20,6 +20,7 @@ library(ggtern)
 library(factoextra)
 library(nlme)
 library(forecast)
+library(lcmm)
 rs <- read_csv("rs.csv")
 ```
 
@@ -377,8 +378,6 @@ rs_1005_nsaa <- rs_1005_nsaa %>% distinct(USUBJID, VISIT,
 # make RSORRES numeric
 rs_1005_nsaa$RSORRES <- as.numeric(rs_1005_nsaa$RSORRES)
 
-rs_1005_nsaa$VISIT <- rs_1005_nsaa$VISIT - mean(rs_1005_nsaa$VISIT)
-
 # perform bootstrap
 
 # model grouped by each patient so different patients aren't correlated
@@ -429,3 +428,22 @@ Let's interpret the standardized residuals analysis. Upon analysing both standar
 The deliverable - if we have a treatment effect which causes an improvement in the NSAA by 'x' amount how many patients do we need in the trial?
 
 How does clustering relate to this? If we have clusters then the model will change and the treatment effect may be different between clusters - so we performed clustering as a sense check to see if there is a meaningful way to separate the patients - idea for further work.
+
+```{r}
+# LCTM work
+rs_1005_nsaa$USUBJID_numeric <- as.numeric(factor(rs_1005_nsaa$USUBJID))
+lctm_4 <- hlme(fixed = RSORRES ~ 1 + VISIT + VISIT**2,
+               mixture = ~ 1 + VISIT + VISIT**2, 
+               subject = 'USUBJID_numeric',
+               ng = 4,
+               data = rs_1005_nsaa)
+
+lctm_data <- rs_1005_nsaa %>%
+  arrange(USUBJID, VISITNUM) %>%
+  pivot_wider(id_cols = USUBJID, 
+              names_from = VISITNUM, 
+              values_from = RSORRES, 
+              names_prefix = "VISIT")
+
+summary(lctm_4)
+```
