@@ -438,12 +438,25 @@ lctm_4 <- hlme(fixed = RSORRES ~ 1 + VISIT + VISIT**2,
                ng = 4,
                data = rs_1005_nsaa)
 
+averages <- rs_1005_nsaa %>%
+  filter(VISIT == 0) %>%
+  group_by(USUBJID) %>%
+  summarise(RSORRES = mean(RSORRES, na.rm = TRUE))
+
+rs_1005_nsaa <- rs_1005_nsaa %>%
+  left_join(averages, by = "USUBJID", suffix = c("", "_avg")) %>%
+  mutate(RSORRES = ifelse(VISIT == 0, RSORRES_avg, RSORRES)) %>%
+  select(-RSORRES_avg)
+
 lctm_data <- rs_1005_nsaa %>%
-  arrange(USUBJID, VISITNUM) %>%
+  arrange(USUBJID, VISIT) %>%
   pivot_wider(id_cols = USUBJID, 
-              names_from = VISITNUM, 
+              names_from = VISIT, 
               values_from = RSORRES, 
               names_prefix = "VISIT")
 
-summary(lctm_4)
+pp = postprob(lctm_4)
+print(pp[[1]])
+print(pp[[2]])
+print(pp[[3]])
 ```
