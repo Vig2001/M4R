@@ -237,9 +237,14 @@ plot <- ggtern(data = rs_1005_bplot, aes(x = `0`, y = `1`, z = `2`)) +
 return(plot)
 }
 
+if (!file.exists("plots")) {
+  dir.create("plots")
+}
+
 for (test_component in RSTEST_classes){
   plot <- plot_ternary(test_component)
-  print(plot)
+  filename <- paste("plots/", test_component, ".png", sep = "")
+  ggsave(filename, plot, device = "png")
 }
 ```
 
@@ -270,6 +275,8 @@ pca_facto <- PCA(X0, graph = FALSE)
 
 fviz_screeplot(pca_facto, addlabels = TRUE, ylim = c(0, 100), 
                main = "Scree Plot")
+
+
 
 # loadings matrix
 loadings_matrix_facto <- pca_facto$var$coord
