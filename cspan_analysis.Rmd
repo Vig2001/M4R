@@ -21,6 +21,8 @@ library(factoextra)
 library(nlme)
 library(forecast)
 library(lcmm)
+library(lmeInfo)
+library(boot)
 rs <- read_csv("rs.csv")
 ```
 
@@ -274,19 +276,24 @@ print(loadings_matrix[,1:2])
 # nicer plots
 pca_facto <- PCA(X0, graph = FALSE)
 
+#if (!dir.exists("plots")) {
+  #dir.create("plots")
+#}
+
+# Generate and save scree plot
 fviz_screeplot(pca_facto, addlabels = TRUE, ylim = c(0, 100), 
                main = "Scree Plot")
+#ggsave("plots/scree_plot.png")
 
-
-
-# loadings matrix
-loadings_matrix_facto <- pca_facto$var$coord
-
-# biplot
+# Generate and save biplot
 fviz_pca_biplot(pca_facto, geom = "point", col.var = "contrib", 
                 gradient.cols = rainbow(ncol(X0)), 
                 repel = TRUE, arrow.len = 0.001, 
                 label = "var", cex = 0.5)
+#ggsave("plots/biplot.png")
+
+# loadings matrix
+loadings_matrix_facto <- pca_facto$var$coord
 
 print(loadings_matrix_facto[, 1:2])
 ```
@@ -355,11 +362,11 @@ These plots show that when we do scale adding the components equally makes sense
 # assign average for the rest of time to complete incomplete trajectories <- this might be the best approach of a bad bunch
 # I am envisioning a matrix which contains the trajectories so the values across time for each USUBJID (for a specific RSTEST) and for NA values we assign the mean of the column)
 
-# 3.) Use the Kalman filter to perform dynamic PCA - we have weights from PCA at visit 1 then we update them for visit 2 based on the information from PCA
+# 5.) Use the Kalman filter to perform dynamic PCA - we have weights from PCA at visit 1 then we update them for visit 2 based on the information from PCA
 
-# 4.) Plot weights when scale=FALSE
+# 3.) Plot weights when scale=FALSE
 
-# 5.) Plot variances of each component with time
+# 4.) Plot variances of each component with time
 ```
 
 We calculate the correlation parameter using gls on the total NSAA score.
@@ -386,18 +393,37 @@ rs_1005_nsaa <- rs_1005_nsaa %>% distinct(USUBJID, VISIT,
 # make RSORRES numeric
 rs_1005_nsaa$RSORRES <- as.numeric(rs_1005_nsaa$RSORRES)
 
-# perform bootstrap
-
-# model grouped by each patient so different patients aren't correlated
+# output summary
 nsaa_total_gls <- gls(RSORRES ~ 1 + VISIT + VISIT**2, 
-                      data = rs_1005_nsaa, 
-                      correlation = corAR1(form = ~ 1 | USUBJID))
+                        data = rs_1005_nsaa, 
+                        correlation = corAR1(form = ~ 1 | USUBJID))
 
-# output the phi parameter
-# centre visit in the dataset <- the correlation under visit is just the correlation between visit and the intercept.
-nsaa_total_gls_sum <- summary(nsaa_total_gls)
-print(nsaa_total_gls_sum)
+# the correlation under visit is just the correlation between visit and the intercept.
+summary(nsaa_total_gls)
 
+# get the phi parameter from the data and perform bootstrap
+gls_phi <- function(data, indices){
+  boot_data = rs_1005_nsaa[indices, ]
+  # model grouped by each patient so different patients aren't correlated
+  gls_model <- gls(RSORRES ~ 1 + VISIT + VISIT**2, 
+                        data = boot_data, 
+                        correlation = corAR1(form = ~ 1 | USUBJID))
+  # output the phi parameter
+  phi <- extract_varcomp(gls_model)[1]
+  return(as.numeric(phi))
+}
+
+set.seed(123) 
+# 1000 bootstrap samples
+bootstrap_results <- boot(data = rs_1005_nsaa, statistic = gls_phi, R = 1000)
+# histogram of results
+hist(bootstrap_results$t, breaks = 30, main = "Histogram of Phi Parameters",
+     xlab = "Phi Parameter")
+mean_phi <- mean(bootstrap_results)
+print(mean_phi)
+```
+
+```{r}
 # plot the residuals as a whole
 plot(nsaa_total_gls, resid(., type="p")~fitted(.), abline=0)
 # plot the residuals for every visit
@@ -462,9 +488,4 @@ lctm_data <- rs_1005_nsaa %>%
               names_from = VISIT, 
               values_from = RSORRES, 
               names_prefix = "VISIT")
-
-pp = postprob(lctm_4)
-print(pp[[1]])
-print(pp[[2]])
-print(pp[[3]])
 ```
