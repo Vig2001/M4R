@@ -347,9 +347,7 @@ These plots show that when we do scale adding the components equally makes sense
 ```{r}
 # TO DO LIST
 
-# 1.) perform bootstrap on the gls model to see the histogram of values that the phi parameter takes.
-
-# 2.) Perform latent class trajectory analysis on this data to see what was done in Muntoni et al - want to perform on each component trajectory as well as the trajectory of the total. 
+# 1.) Perform latent class trajectory analysis on this data to see what was done in Muntoni et al - want to perform on each component trajectory as well as the trajectory of the total. 
 # to evaluate maybe use cross validation so first fit the model with a certain number of clusters and find and record what cluster each trajectory is classified to
 # then perform K-fold cross validation assess the accuracy - the proportion of trajectories correctly classified - average this across all K 
 # we can use this average accuracy to evaluate which model is best
@@ -362,11 +360,11 @@ These plots show that when we do scale adding the components equally makes sense
 # assign average for the rest of time to complete incomplete trajectories <- this might be the best approach of a bad bunch
 # I am envisioning a matrix which contains the trajectories so the values across time for each USUBJID (for a specific RSTEST) and for NA values we assign the mean of the column)
 
-# 5.) Use the Kalman filter to perform dynamic PCA - we have weights from PCA at visit 1 then we update them for visit 2 based on the information from PCA
+# 2.) Plot weights when scale=FALSE
 
-# 3.) Plot weights when scale=FALSE
+# 3.) Plot variances of each component with time
 
-# 4.) Plot variances of each component with time
+# 4.) Use the Kalman filter to perform dynamic PCA - we have weights from PCA at visit 1 then we update them for visit 2 based on the information from PCA
 ```
 
 We calculate the correlation parameter using gls on the total NSAA score.
@@ -466,26 +464,35 @@ How does clustering relate to this? If we have clusters then the model will chan
 ```{r}
 # LCTM work
 rs_1005_nsaa$USUBJID_numeric <- as.numeric(factor(rs_1005_nsaa$USUBJID))
-lctm_4 <- hlme(fixed = RSORRES ~ 1 + VISIT + VISIT**2,
-               mixture = ~ 1 + VISIT + VISIT**2, 
+
+lctm_1 <- hlme(fixed = RSORRES ~ VISIT + VISIT**2, 
                subject = 'USUBJID_numeric',
-               ng = 4,
+               ng = 1,
                data = rs_1005_nsaa)
-
-averages <- rs_1005_nsaa %>%
-  filter(VISIT == 0) %>%
-  group_by(USUBJID) %>%
-  summarise(RSORRES = mean(RSORRES, na.rm = TRUE))
-
-rs_1005_nsaa <- rs_1005_nsaa %>%
-  left_join(averages, by = "USUBJID", suffix = c("", "_avg")) %>%
-  mutate(RSORRES = ifelse(VISIT == 0, RSORRES_avg, RSORRES)) %>%
-  select(-RSORRES_avg)
-
-lctm_data <- rs_1005_nsaa %>%
-  arrange(USUBJID, VISIT) %>%
-  pivot_wider(id_cols = USUBJID, 
-              names_from = VISIT, 
-              values_from = RSORRES, 
-              names_prefix = "VISIT")
+lctm_2 <- gridsearch(hlme(fixed = RSORRES ~ VISIT + VISIT**2,
+                          mixture =~VISIT + VISIT**2,
+                          ng = 2,
+                          subject = 'USUBJID_numeric',
+                          data = rs_1005_nsaa),
+                     rep=100, maxiter=30, minit=lctm_1)
+lctm_3 <- gridsearch(hlme(fixed = RSORRES ~ VISIT + VISIT**2,
+                          mixture =~VISIT + VISIT**2,
+                          ng = 3,
+                          subject = 'USUBJID_numeric',
+                          data = rs_1005_nsaa),
+                     rep=100, maxiter=30, minit=lctm_1)
+lctm_4 <- gridsearch(hlme(fixed = RSORRES ~ VISIT + VISIT**2,
+                          mixture =~VISIT + VISIT**2,
+                          ng = 4,
+                          subject = 'USUBJID_numeric',
+                          data = rs_1005_nsaa),
+                     rep=100, maxiter=30, minit=lctm_1)
+lctm_5 <- gridsearch(hlme(fixed = RSORRES ~ VISIT + VISIT**2,
+                          mixture =~VISIT + VISIT**2,
+                          ng = 5,
+                          subject = 'USUBJID_numeric',
+                          data = rs_1005_nsaa),
+                     rep=100, maxiter=30, minit=lctm_1)
+summarytable(lctm_1, lctm_2, lctm_3, lctm_4)
+summaryplot(lctm_1, lctm_2, lctm_3, lctm_4)
 ```
