@@ -419,7 +419,7 @@ bootstrap_results <- boot(data = rs_1005_nsaa, statistic = gls_phi, R = 1000)
 # histogram of results
 hist(bootstrap_results$t, breaks = 30, main = "Histogram of Phi Parameters",
      xlab = "Phi Parameter")
-mean_phi <- mean(bootstrap_results)
+mean_phi <- mean(bootstrap_results$t)
 print(mean_phi)
 ```
 
