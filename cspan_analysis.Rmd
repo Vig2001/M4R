@@ -347,18 +347,9 @@ These plots show that when we do scale adding the components equally makes sense
 ```{r}
 # TO DO LIST
 
-# 1.) Perform latent class trajectory analysis on this data to see what was done in Muntoni et al - want to perform on each component trajectory as well as the trajectory of the total. 
-# to evaluate maybe use cross validation so first fit the model with a certain number of clusters and find and record what cluster each trajectory is classified to
-# then perform K-fold cross validation assess the accuracy - the proportion of trajectories correctly classified - average this across all K 
-# we can use this average accuracy to evaluate which model is best
+# 1.) choose half of the patients and alter their trajectory to mimic a treatment effect- add a column for treatment, fit a gls model and see if you can identify whether someone got treated. Ultimately, you want to investigate how the size of the treatment effect affects the coefficient. Then bootstrap.
 
-# cluster validation is a method which could be the same as that described above - look up the silhouette score or cosine similarity
-
-# (Ways to deal with different sizes of trajectories (because of dropout)
-# simplest - just perform analysis on complete trajectories but only 3 individuals have complete trajectories
-# assign last value for the rest of time to complete incomplete trajectories
-# assign average for the rest of time to complete incomplete trajectories <- this might be the best approach of a bad bunch
-# I am envisioning a matrix which contains the trajectories so the values across time for each USUBJID (for a specific RSTEST) and for NA values we assign the mean of the column)
+# to see how the sample size effects how easy it is to visualize the difference between treated and untreated patients.
 
 # 2.) Plot weights when scale=FALSE
 
