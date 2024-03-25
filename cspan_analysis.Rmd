@@ -482,7 +482,7 @@ treatment_effect_fn <- function(data, num_bootstraps){
     # randomly select half of the bootstrap sample
     selected_patients <- sample(unique(rs_1005_nsaa$USUBJID), size = num_patients / 2)
     # Define the treatment effect
-    treatment_effect <- 2
+    treatment_effect <- 5
     # record treatment
     sampled_data$TREAT <- ifelse(sampled_data$USUBJID %in% selected_patients, 1, 0)
     # simple translation to the scores
@@ -517,9 +517,7 @@ ggplot(data.frame(PValue = bootstrap_p_values), aes(x = PValue)) +
 
 print(sig_values)
 ```
-Here we print out the proportion of significant p-values (i.e. p-values under 0.05). This is directly linked with the statistical power of the hypothesis test we are conducting, which is a test to investigate whether the treatment effect has an observable impact on the mean NSAA trajectories. When the proportion of significant p-values is close to 1 this illustrates we have a strong statistical test, which translates to the probability that the test correctly rejects the null hypothesis (in this scenario this is the hypothesis that the treatment effect has no observable impact). Therefore, if we have a proportion for \verb|sig_values| close to 1 then if there is indeed a treatment effect the test is high likely to detect it. Conversely, if it is closer to 0 then the test is unlikely to detect the treatment effect.
-
-
+Here we print out the proportion of significant p-values (i.e. p-values under 0.05). This is directly linked with the statistical power of the hypothesis test we are conducting, which is a test to investigate whether the treatment effect has an observable impact on the mean NSAA trajectories. When the proportion of significant p-values is close to 1 this illustrates we have a strong statistical test, which translates to the probability that the test correctly rejects the null hypothesis (in this scenario this is the hypothesis that the treatment effect has no observable impact). Therefore, if we have a proportion for \verb|sig_values| close to 1 then if there is indeed a treatment effect the test is high likely to detect it. Conversely, if it is closer to 0 then the test is unlikely to detect the treatment effect. We can see that a treatment effect of 5 gives us our desired result for a sample size of 131 patients. Now we must simulate how the sample size affects the power.
 
 # TO DO LIST
 
