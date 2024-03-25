@@ -531,9 +531,9 @@ treatment_effect <- 5 # significant treatment effect
 
 # Using rough numbers from nsaa_total_gls and previous studies
 # this is specifically tailored to VISIT being 12 weeks apart
-intercept <- 18.9 # Replace with actual intercept
-visit_coef <- 
-visit_squared_coef <- 0 
+intercept <- 18.9
+visit_coef <- 0 # ask chris
+visit_squared_coef <- 0 # ask chris
 
 # Simulate AR(1) residuals for one patient
 simulate_ar1_residuals <- function(n, rho, sigma) {
