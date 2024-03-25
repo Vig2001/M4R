@@ -381,7 +381,7 @@ summary(nsaa_total_gls)
 gls_phi <- function(data, indices){
   boot_data = rs_1005_nsaa[indices, ]
   # model grouped by each patient so different patients aren't correlated
-  gls_model <- gls(RSORRES ~ 1 + VISIT + VISIT**2, 
+  gls_model <- gls(RSORRES ~ 1 + VISIT + I(VISIT^2), 
                         data = boot_data, 
                         correlation = corAR1(form = ~ 1 | USUBJID))
   # output the phi parameter
@@ -429,6 +429,7 @@ residuals_nsaa <- residuals(nsaa_uncorrelated_gls)
 # Can clearly observe a lag 1 correlation structure which is encapsulated by the AR1 in our original model.
 pacf(residuals_nsaa, lag.max=10, main="PACF of Uncorrelated Residuals")
 ```
+
 The summary indicates an AR(1) correlation structure in your GLS model, with a high phi estimate of 0.9639783, suggesting strong correlation between the nsaa scores of a single patient between two visits (i.e. 12 weeks apart).
 
 The negative correlation for VISIT outputted by the summary signifies the correlation between the random effects and the error of each observation. The random effects in the model (as specified above) is the patients themselves i.e. the only grouping structure we hypothesize is groups containing one patient each. Ideally this should be zero because the error in an NSAA measurement at a particular time of a particular patient should not be correlated to the patient that the measurement comes from (random effect).
@@ -518,6 +519,67 @@ ggplot(data.frame(PValue = bootstrap_p_values), aes(x = PValue)) +
 print(sig_values)
 ```
 Here we print out the proportion of significant p-values (i.e. p-values under 0.05). This is directly linked with the statistical power of the hypothesis test we are conducting, which is a test to investigate whether the treatment effect has an observable impact on the mean NSAA trajectories. When the proportion of significant p-values is close to 1 this illustrates we have a strong statistical test, which translates to the probability that the test correctly rejects the null hypothesis (in this scenario this is the hypothesis that the treatment effect has no observable impact). Therefore, if we have a proportion for \verb|sig_values| close to 1 then if there is indeed a treatment effect the test is high likely to detect it. Conversely, if it is closer to 0 then the test is unlikely to detect the treatment effect. We can see that a treatment effect of 5 gives us our desired result for a sample size of 131 patients. Now we must simulate how the sample size affects the power.
+
+```{r}
+rho <- mean_phi # choose from previous work
+sigma <- 2 # modify std
+
+# Parameters
+N <- 100 # Number of patients
+visits <- 1:10 # Visits from 1 to 10
+treatment_effect <- 5 # significant treatment effect
+
+# Using rough numbers from nsaa_total_gls and previous studies
+# this is specifically tailored to VISIT being 12 weeks apart
+intercept <- 18.9 # Replace with actual intercept
+visit_coef <- 
+visit_squared_coef <- 0 
+
+# Simulate AR(1) residuals for one patient
+simulate_ar1_residuals <- function(n, rho, sigma) {
+  e <- rnorm(n, mean = 0, sd = sigma)
+  residuals <- vector(length = n)
+  residuals[1] <- e[1]
+  
+  for (i in 2:n) {
+    residuals[i] <- rho * residuals[i - 1] + e[i]
+  }
+  
+  return(residuals)
+}
+
+# Function to generate data for one patient
+simulate_patient_data <- function(patient_id, treat, visits, rho, sigma) {
+  n <- length(visits)
+  ar1_residuals <- simulate_ar1_residuals(n, rho, sigma)
+  
+  rsorres <- intercept + 
+             visit_coef * visits + 
+             visit_squared_coef * visits^2 + 
+             treat * treatment_effect +
+             ar1_residuals
+  
+  data.frame(
+    USUBJID = rep(patient_id, n),
+    VISIT = visits,
+    TREAT = rep(treat, n),
+    RSORRES = rsorres
+  )
+}
+
+# Simulate data for N patients
+set.seed(123)
+patient_data <- lapply(1:N, function(i) {
+  treat <- sample(c(0, 1), 1)
+  simulate_patient_data(i, treat, visits, rho, sigma)
+})
+
+# Combine all patient data into one dataframe
+simulated_data <- bind_rows(patient_data)
+
+# Show the first few rows
+head(simulated_data)
+```
 
 # TO DO LIST
 
