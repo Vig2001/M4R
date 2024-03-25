@@ -222,7 +222,7 @@ rs_1005_proportions <- rs_1005_proportions %>%
 
 We want to plot the trajectories of each component on a barycentric plot
 
-```{r, warning=FALSE}
+```{r, warning=FALSE, cache=TRUE}
 plot_ternary <- function(test_component){
 rs_1005_bplot <- rs_1005_proportions %>% filter(RSTEST == test_component)
 
@@ -354,8 +354,6 @@ These plots show that when we do scale adding the components equally makes sense
 # 2.) Plot weights when scale=FALSE
 
 # 3.) Plot variances of each component with time
-
-# 4.) Use the Kalman filter to perform dynamic PCA - we have weights from PCA at visit 1 then we update them for visit 2 based on the information from PCA
 ```
 
 We calculate the correlation parameter using gls on the total NSAA score.
@@ -452,7 +450,7 @@ The deliverable - if we have a treatment effect which causes an improvement in t
 
 How does clustering relate to this? If we have clusters then the model will change and the treatment effect may be different between clusters - so we performed clustering as a sense check to see if there is a meaningful way to separate the patients - idea for further work.
 
-```{r}
+```{r, cache=TRUE}
 # LCTM work
 rs_1005_nsaa$USUBJID_numeric <- as.numeric(factor(rs_1005_nsaa$USUBJID))
 
@@ -478,12 +476,30 @@ lctm_4 <- gridsearch(hlme(fixed = RSORRES ~ VISIT + VISIT**2,
                           subject = 'USUBJID_numeric',
                           data = rs_1005_nsaa),
                      rep=100, maxiter=30, minit=lctm_1)
-lctm_5 <- gridsearch(hlme(fixed = RSORRES ~ VISIT + VISIT**2,
-                          mixture =~VISIT + VISIT**2,
-                          ng = 5,
-                          subject = 'USUBJID_numeric',
-                          data = rs_1005_nsaa),
-                     rep=100, maxiter=30, minit=lctm_1)
+```
+```{r}
 summarytable(lctm_1, lctm_2, lctm_3, lctm_4)
 summaryplot(lctm_1, lctm_2, lctm_3, lctm_4)
+```
+We will investigate how the size of the treatment effect affects its significance in the model
+```{r}
+num_patients <- length(unique(rs_1005_nsaa$USUBJID))
+
+# Randomly select half of the patients
+set.seed(123) # For reproducibility
+selected_patients <- sample(unique(rs_1005_nsaa$USUBJID), size = num_patients / 2)
+
+# Define the treatment effect
+treatment_effect <- 0.63 # Modify - this gives p-value of 0.0499
+rs_1005_treatment <- rs_1005_nsaa
+# record treatment
+rs_1005_treatment$TREAT <- ifelse(rs_1005_treatment$USUBJID %in% selected_patients, 1, 0)
+# simple translation to the scores
+rs_1005_treatment$RSORRES <- ifelse(rs_1005_treatment$USUBJID %in% selected_patients,
+                               rs_1005_treatment$RSORRES + treatment_effect,
+                               rs_1005_treatment$RSORRES)
+nsaa_treatment_gls <- gls(RSORRES ~ 1 + VISIT + VISIT**2 + TREAT, 
+                        data = rs_1005_treatment, 
+                        correlation = corAR1(form = ~ 1 | USUBJID))
+summary(nsaa_treatment_gls)
 ```
