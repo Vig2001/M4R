@@ -42,7 +42,7 @@ Chris' snippet of code
 
 Now we perform some data analysis. Firstly, we only obtain data which belong to the study DMD-1005. We then filter so that we only get values of each NSAA component at baseline for each patient. The VISITNUM are in a nonsensical order because some patients are assigned a visit number of 99. This has to be investigated - hypothesis is that the patients which were assigned a VISITNUM of 99 did not make it past screening.
 
-```{r}
+```{r, cache=TRUE}
 # get only the relevant study
 rs_1005 <- rs %>% filter(STUDYID == "DMD-1005")
 
@@ -91,7 +91,7 @@ print(length(intersect(failed_screen, dropout_patients)))
 
 Idea: Iterate through the dropped out patients. Find their second largest visit number (x), as their largest will be 99, then change VISITNUM = 99 to VISITNUM = x+1
 
-```{r}
+```{r, cache=TRUE}
 for(patient_id in dropout_patients) {
   # Find the second largest VISITNUM for the current patient excluding 99
   second_largest_visitnum <- rs_1005 %>%
@@ -116,7 +116,7 @@ rs_1005$VISITNUM <- mapping[as.character(rs_1005$VISITNUM)]
 
 Now we get the matrix that we input into PCA from this
 
-```{r}
+```{r,cache=TRUE}
 # first we have to investigate all the factors that make up RSTEST column
 
 RSTEST_classes <- unique(rs_1005$RSTEST)
@@ -149,7 +149,7 @@ rs_1005_pivot <- rs_1005_data %>% select(USUBJID, RSTEST, RSORRES) %>%
 
 Let's now extract the matrix and create a function which generalises this process for any VISITNUM.
 
-```{r}
+```{r,cache=TRUE}
 # convert to matrix removing the first column as that is subject ID
 X0 <- as.matrix(rs_1005_pivot[2:18])
 # fill na with mean value of the column
@@ -192,12 +192,12 @@ Should we use scale = TRUE or scale = FALSE? scale = TRUE will standardize each 
 
 In this setting, we have that each component of the NSAA takes a value of 0, 1 or 2 and so are on the same scale. However, one task may be inherently easier to do than the other, and so has an abnormally higher frequency of 2s. So, to answer the question scale = TRUE or FALSE, we have to investigate the proportion of 0s, 1s and 2s for each component (outputted as barycentric coordinates), as well as the variance-covariance matrix to formulate a robust conclusion.
 
-```{r}
+```{r, cache=TRUE}
 # print out the variances from the covariance matrix
 print(diag(cov(X0))) # <- some evidence for scale=TRUE (variances of each component do be different).
 ```
 
-```{r}
+```{r, cache=TRUE}
 # Calculate the counts for each RSORRES value within each RSTEST and VISITNUM group
 rs_1005_counts <- rs_1005 %>%
   filter(RSTEST %in% RSTEST_list) %>%
@@ -344,17 +344,6 @@ axis(side = 4, at = axTicks(4), labels = axTicks(4))
 # the weights are probably only reliable until the 6th visit approx
 ```
 These plots show that when we do scale adding the components equally makes sense, but what is currently being done is not accounting for the variances of each component! maybe plot this when scale=FALSE.
-```{r}
-# TO DO LIST
-
-# 1.) choose half of the patients and alter their trajectory to mimic a treatment effect- add a column for treatment, fit a gls model and see if you can identify whether someone got treated. Ultimately, you want to investigate how the size of the treatment effect affects the coefficient. Then bootstrap.
-
-# to see how the sample size effects how easy it is to visualize the difference between treated and untreated patients.
-
-# 2.) Plot weights when scale=FALSE
-
-# 3.) Plot variances of each component with time
-```
 
 We calculate the correlation parameter using gls on the total NSAA score.
 ```{r}
@@ -477,29 +466,65 @@ lctm_4 <- gridsearch(hlme(fixed = RSORRES ~ VISIT + VISIT**2,
                           data = rs_1005_nsaa),
                      rep=100, maxiter=30, minit=lctm_1)
 ```
+
 ```{r}
 summarytable(lctm_1, lctm_2, lctm_3, lctm_4)
 summaryplot(lctm_1, lctm_2, lctm_3, lctm_4)
 ```
 We will investigate how the size of the treatment effect affects its significance in the model
 ```{r}
-num_patients <- length(unique(rs_1005_nsaa$USUBJID))
+treatment_effect_fn <- function(data, num_bootstraps){
+  p_values <- numeric(num_bootstraps)
+  for (i in 1:num_bootstraps){
+    # bootstrap
+    sampled_data <- data[sample(nrow(data), replace = TRUE), ]
+    num_patients <- length(unique(sampled_data$USUBJID))
+    # randomly select half of the bootstrap sample
+    selected_patients <- sample(unique(rs_1005_nsaa$USUBJID), size = num_patients / 2)
+    # Define the treatment effect
+    treatment_effect <- 2
+    # record treatment
+    sampled_data$TREAT <- ifelse(sampled_data$USUBJID %in% selected_patients, 1, 0)
+    # simple translation to the scores
+    sampled_data$RSORRES <- ifelse(sampled_data$USUBJID %in% selected_patients,
+                                 sampled_data$RSORRES + treatment_effect,
+                                 sampled_data$RSORRES)
+    gls_model <- gls(RSORRES ~ 1 + VISIT + VISIT**2 + TREAT, 
+                          data = sampled_data, 
+                          correlation = corAR1(form = ~ 1 | USUBJID))
+    summary_gls <- summary(gls_model)
+    # Extract coefficients and standard errors
+    coefficients <- summary_gls$tTable[, "Value"]
+    standard_errors <- summary_gls$tTable[, "Std.Error"]
+    
+    # Calculate p_value
+    z_scores <- coefficients / standard_errors
+    # We assume that with treatment the NSAA mean is larger hence lower.tail=FALSE
+    p_values[i] <- 2 * pnorm(abs(z_scores["TREAT"]), lower.tail = FALSE)
+  }
+  return(p_values)
+}
 
-# Randomly select half of the patients
-set.seed(123) # For reproducibility
-selected_patients <- sample(unique(rs_1005_nsaa$USUBJID), size = num_patients / 2)
+set.seed(123)
+bootstrap_p_values <- treatment_effect_fn(rs_1005_nsaa, num_bootstraps = 500)
+sig_values <- sum(bootstrap_p_values < 0.05) / length(bootstrap_p_values)
 
-# Define the treatment effect
-treatment_effect <- 0.63 # Modify - this gives p-value of 0.0499
-rs_1005_treatment <- rs_1005_nsaa
-# record treatment
-rs_1005_treatment$TREAT <- ifelse(rs_1005_treatment$USUBJID %in% selected_patients, 1, 0)
-# simple translation to the scores
-rs_1005_treatment$RSORRES <- ifelse(rs_1005_treatment$USUBJID %in% selected_patients,
-                               rs_1005_treatment$RSORRES + treatment_effect,
-                               rs_1005_treatment$RSORRES)
-nsaa_treatment_gls <- gls(RSORRES ~ 1 + VISIT + VISIT**2 + TREAT, 
-                        data = rs_1005_treatment, 
-                        correlation = corAR1(form = ~ 1 | USUBJID))
-summary(nsaa_treatment_gls)
+# Plot the p-values
+ggplot(data.frame(PValue = bootstrap_p_values), aes(x = PValue)) +
+  geom_histogram(bins = 30, fill = "skyblue", color = "black") +
+  theme_minimal() +
+  labs(title = "Distribution of P-Values from Bootstrap", x = "P-Value", y = "Frequency")
+
+print(sig_values)
 ```
+Here we print out the proportion of significant p-values (i.e. p-values under 0.05). This is directly linked with the statistical power of the hypothesis test we are conducting, which is a test to investigate whether the treatment effect has an observable impact on the mean NSAA trajectories. When the proportion of significant p-values is close to 1 this illustrates we have a strong statistical test, which translates to the probability that the test correctly rejects the null hypothesis (in this scenario this is the hypothesis that the treatment effect has no observable impact). Therefore, if we have a proportion for \verb|sig_values| close to 1 then if there is indeed a treatment effect the test is high likely to detect it. Conversely, if it is closer to 0 then the test is unlikely to detect the treatment effect.
+
+
+
+# TO DO LIST
+
+1.) choose half of the patients and alter their trajectory to mimic a treatment effect- add a column for treatment, fit a gls model and see if you can identify whether someone got treated. Ultimately, you want to investigate how the size of the treatment effect affects the coefficient. Then bootstrap. To see how the sample size effects how easy it is to visualize the difference between treated and untreated patients.
+
+2.) Plot weights when scale=FALSE
+
+3.) Plot variances of each component with time
