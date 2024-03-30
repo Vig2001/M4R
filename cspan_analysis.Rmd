@@ -481,7 +481,8 @@ treatment_effect_fn <- function(data, num_bootstraps){
     sampled_data <- data[sample(nrow(data), replace = TRUE), ]
     num_patients <- length(unique(sampled_data$USUBJID))
     # randomly select half of the bootstrap sample
-    selected_patients <- sample(unique(rs_1005_nsaa$USUBJID), size = num_patients / 2)
+    selected_patients <- sample(unique(rs_1005_nsaa$USUBJID),
+                                size = num_patients / 2)
     # Define the treatment effect
     treatment_effect <- 5
     # record treatment
@@ -525,15 +526,17 @@ rho <- mean_phi # choose from previous work
 sigma <- 2 # modify std
 
 # Parameters
-N <- 100 # Number of patients
+N <- 1000 # Number of trajectories - 100 patients
 visits <- 1:10 # Visits from 1 to 10
-treatment_effect <- 5 # significant treatment effect
+treatment_effect <- 0.4# significant treatment effect
 
-# Using rough numbers from nsaa_total_gls and previous studies
-# this is specifically tailored to VISIT being 12 weeks apart
-intercept <- 18.9
-visit_coef <- 0 # ask chris
-visit_squared_coef <- 0 # ask chris
+# Using rough numbers - ask chris on this
+intercept <- 15
+visit_coef <- 2.5
+visit_squared_coef <- -0.44
+
+# Ensure half of the patients are treated
+treatment_assignments <- sample(c(rep(1, N/2), rep(0, N/2)))
 
 # Simulate AR(1) residuals for one patient
 simulate_ar1_residuals <- function(n, rho, sigma) {
@@ -559,6 +562,9 @@ simulate_patient_data <- function(patient_id, treat, visits, rho, sigma) {
              treat * treatment_effect +
              ar1_residuals
   
+  # Ensure correct range and integer type
+  rsorres <- round(pmin(pmax(rsorres, 0), 34))
+  
   data.frame(
     USUBJID = rep(patient_id, n),
     VISIT = visits,
@@ -567,19 +573,23 @@ simulate_patient_data <- function(patient_id, treat, visits, rho, sigma) {
   )
 }
 
-# Simulate data for N patients
-set.seed(123)
+# Simulate data for N trajectories = 10 * n patients
 patient_data <- lapply(1:N, function(i) {
-  treat <- sample(c(0, 1), 1)
+  treat <- sample(c(0,1), 1)
   simulate_patient_data(i, treat, visits, rho, sigma)
 })
 
-# Combine all patient data into one dataframe
+# Combine all patient data into one data frame
 simulated_data <- bind_rows(patient_data)
 
-# Show the first few rows
-head(simulated_data)
+gls_model <- gls(RSORRES ~ 1 + VISIT + VISIT**2 + TREAT, 
+                      data = simulated_data, 
+                      correlation = corAR1(form = ~ 1 | USUBJID))
+summary_gls <- summary(gls_model)
+print(summary_gls)
 ```
+Yet to do bootstrap analysis on how the size of the sample affects the observed significance of the treatment effect. But so far from experimenting with the treatment effect and size, a size of 100 patients (50 treated and 50 untreated) should be enough to distinguish between treated and untreated groups because the model can detect a significant treatment coefficient even when the true treatment effect is 0.5!
+
 
 # TO DO LIST
 
