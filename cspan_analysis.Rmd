@@ -370,7 +370,7 @@ rs_1005_nsaa <- rs_1005_nsaa %>% distinct(USUBJID, VISIT,
 rs_1005_nsaa$RSORRES <- as.numeric(rs_1005_nsaa$RSORRES)
 
 # output summary
-nsaa_total_gls <- gls(RSORRES ~ 1 + VISIT + VISIT**2, 
+nsaa_total_gls <- gls(RSORRES ~ 1 + VISIT + I(VISIT^2), 
                         data = rs_1005_nsaa, 
                         correlation = corAR1(form = ~ 1 | USUBJID))
 
@@ -423,7 +423,7 @@ subject_residuals <- subset(residuals_data,
 pacf(subject_residuals, main=paste("PACF for Subject", random_subject))
 
 # fit the model without ar1 correlation - then plot the residuals and check its autocorrelation.
-nsaa_uncorrelated_gls <- gls(RSORRES ~ 1 + VISIT + VISIT**2,
+nsaa_uncorrelated_gls <- gls(RSORRES ~ 1 + VISIT + I(VISIT^2),
                              data = rs_1005_nsaa)
 residuals_nsaa <- residuals(nsaa_uncorrelated_gls)
 # Can clearly observe a lag 1 correlation structure which is encapsulated by the AR1 in our original model.
@@ -444,24 +444,24 @@ How does clustering relate to this? If we have clusters then the model will chan
 # LCTM work
 rs_1005_nsaa$USUBJID_numeric <- as.numeric(factor(rs_1005_nsaa$USUBJID))
 
-lctm_1 <- hlme(fixed = RSORRES ~ VISIT + VISIT**2, 
+lctm_1 <- hlme(fixed = RSORRES ~ VISIT + I(VISIT^2), 
                subject = 'USUBJID_numeric',
                ng = 1,
                data = rs_1005_nsaa)
-lctm_2 <- gridsearch(hlme(fixed = RSORRES ~ VISIT + VISIT**2,
-                          mixture =~VISIT + VISIT**2,
+lctm_2 <- gridsearch(hlme(fixed = RSORRES ~ VISIT + I(VISIT^2),
+                          mixture =~VISIT + I(VISIT^2),
                           ng = 2,
                           subject = 'USUBJID_numeric',
                           data = rs_1005_nsaa),
                      rep=100, maxiter=30, minit=lctm_1)
-lctm_3 <- gridsearch(hlme(fixed = RSORRES ~ VISIT + VISIT**2,
-                          mixture =~VISIT + VISIT**2,
+lctm_3 <- gridsearch(hlme(fixed = RSORRES ~ VISIT + I(VISIT^2),
+                          mixture =~VISIT + I(VISIT^2),
                           ng = 3,
                           subject = 'USUBJID_numeric',
                           data = rs_1005_nsaa),
                      rep=100, maxiter=30, minit=lctm_1)
-lctm_4 <- gridsearch(hlme(fixed = RSORRES ~ VISIT + VISIT**2,
-                          mixture =~VISIT + VISIT**2,
+lctm_4 <- gridsearch(hlme(fixed = RSORRES ~ VISIT + I(VISIT^2),
+                          mixture =~VISIT + I(VISIT^2),
                           ng = 4,
                           subject = 'USUBJID_numeric',
                           data = rs_1005_nsaa),
@@ -491,7 +491,7 @@ treatment_effect_fn <- function(data, num_bootstraps){
     sampled_data$RSORRES <- ifelse(sampled_data$USUBJID %in% selected_patients,
                                  sampled_data$RSORRES + treatment_effect,
                                  sampled_data$RSORRES)
-    gls_model <- gls(RSORRES ~ 1 + VISIT + VISIT**2 + TREAT, 
+    gls_model <- gls(RSORRES ~ 1 + VISIT + I(VISIT^2) + TREAT, 
                           data = sampled_data, 
                           correlation = corAR1(form = ~ 1 | USUBJID))
     summary_gls <- summary(gls_model)
@@ -523,12 +523,12 @@ Here we print out the proportion of significant p-values (i.e. p-values under 0.
 
 ```{r}
 rho <- mean_phi # choose from previous work
-sigma <- 2 # modify std
+sigma <- 4 # modify std
 
 # Parameters
-N <- 1000 # Number of trajectories - 100 patients
+N <- 1000 # Number of observations - 100 patients
 visits <- 1:10 # Visits from 1 to 10
-treatment_effect <- 0.4# significant treatment effect
+treatment_effect <- 2 # significant treatment effect
 
 # Using rough numbers - ask chris on this
 intercept <- 15
@@ -582,7 +582,7 @@ patient_data <- lapply(1:N, function(i) {
 # Combine all patient data into one data frame
 simulated_data <- bind_rows(patient_data)
 
-gls_model <- gls(RSORRES ~ 1 + VISIT + VISIT**2 + TREAT, 
+gls_model <- gls(RSORRES ~ 1 + VISIT + I(VISIT^2) + TREAT, 
                       data = simulated_data, 
                       correlation = corAR1(form = ~ 1 | USUBJID))
 summary_gls <- summary(gls_model)
