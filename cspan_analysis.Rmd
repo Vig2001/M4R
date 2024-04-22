@@ -347,10 +347,53 @@ mtext("Sample Size", side=4, line=3)
 # might explain why a lot of components go to zero
 # the weights are probably only reliable until the 6th visit approx
 ```
-These plots show that when we apply scale=TRUE adding the components equally makes sense (the distribution of loadings around each component is ), but what is currently being done is not accounting for the variances of each component! maybe plot this when scale=FALSE.
+The distribution of principal component weights of each component at a specific visit number has a mean of 0.7, but it is clear to see some outliers and the variance in the distribution increase with visit. Therefore, it is hard to justify adding each component equally to give a total NSAA score, even after taking into account that some components display different variability. A potential approach to combat this is to set the total score to be a linear combination of the components, where each scale factor is the PC1 weight of each item.
 
 ```{r}
+# plot trajectory of the weight for each component within PC1 and PC2 against time points
+
+num_visits =  6 #length(unique(rs_1005$VISITNUM))
+num_features = length(RSTEST_list)
+PC1s_f <- matrix(NA, nrow=num_features, ncol=num_visits)
+PC2s_f <- matrix(NA, nrow=num_features, ncol=num_visits)
+num_points <- rep.int(0, times=num_visits)
+#sort(unique(rs_1005$VISITNUM)
+for (v in 0:5){
+  X <- create_matrix(rs_1005, v)
+  pca <- PCA(X, graph = FALSE, scale.unit = FALSE) 
+  PC1 <- pca$var$coord[ ,1]
+  PC2 <- pca$var$coord[ ,2]
+  PC1s_f[, v+1] <- PC1
+  PC2s_f[, v+1] <- PC2
+  num_points[v+1] <- nrow(X)
+}
+
+par(mar = c(5, 4, 4, 5) + 0.1)
+# PC1s
+plot(1:num_visits, PC1s_f[1, ], type = "l", col = 1, xlab = "Visit", ylab = "PC1", xlim = c(1, num_visits), ylim = range(PC1s_f), main = "PC1 Weights")
+for (row in 2:num_features) {
+  lines(1:num_visits, PC1s_f[row, ], col = row)
+}
+
+# Bars to illustrate the number of data points at each VISITNUM
+par(new = TRUE)
+barplot(height = num_points, width = 0.01, col=rgb(0.5, 0.5, 0.5, 0.5), space = 5, axes = FALSE)
+axis(side = 4, at = axTicks(4), labels = axTicks(4))
+mtext("Sample Size", side=4, line=3)
+
+par(mar = c(5, 4, 4, 5) + 0.1)
+plot(1:num_visits, PC2s_f[1, ], type = "l", col = 1, xlab = "Visit", ylab = "PC2", xlim = c(1, num_visits), ylim = range(PC2s_f), main = "PC2 Weights")
+
+for (row in 2:num_features) {
+  lines(1:num_visits, PC2s[row, ], col = row)
+}
+
+par(new = TRUE)
+barplot(height = num_points, width = 0.01, col=rgb(0.5, 0.5, 0.5, 0.5), space = 5, axes = FALSE)
+axis(side = 4, at = axTicks(4), labels = axTicks(4))
+mtext("Sample Size", side=4, line=3)
 ```
+When we don't apply scaling to our principal component analysis, we see a very sparse distribution in the weights of both principal components through time. This further damages the rationale behind adding up the components equally to give a total NSAA score out of 34.
 
 We calculate the correlation parameter using gls on the total NSAA score.
 ```{r}
