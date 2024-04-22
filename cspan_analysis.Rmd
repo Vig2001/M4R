@@ -301,13 +301,13 @@ print(loadings_matrix_facto[, 1:2])
 ```{r, warning=FALSE}
 # plot trajectory of the weight for each component within PC1 and PC2 against time points
 
-num_visits = length(unique(rs_1005$VISITNUM))
+num_visits =  6 #length(unique(rs_1005$VISITNUM))
 num_features = length(RSTEST_list)
-PC1s <- matrix(NA, nrow=num_features, ncol= num_visits)
+PC1s <- matrix(NA, nrow=num_features, ncol=num_visits)
 PC2s <- matrix(NA, nrow=num_features, ncol=num_visits)
 num_points <- rep.int(0, times=num_visits)
-
-for (v in sort(unique(rs_1005$VISITNUM))){
+#sort(unique(rs_1005$VISITNUM)
+for (v in 0:5){
   X <- create_matrix(rs_1005, v)
   pca <- PCA(X, graph = FALSE) 
   PC1 <- pca$var$coord[ ,1]
@@ -317,6 +317,7 @@ for (v in sort(unique(rs_1005$VISITNUM))){
   num_points[v+1] <- nrow(X)
 }
 
+par(mar = c(5, 4, 4, 5) + 0.1)
 # PC1s
 plot(1:num_visits, PC1s[1, ], type = "l", col = 1, xlab = "Visit", ylab = "PC1", xlim = c(1, num_visits), ylim = range(PC1s), main = "PC1 Weights")
 for (row in 2:num_features) {
@@ -325,9 +326,11 @@ for (row in 2:num_features) {
 
 # Bars to illustrate the number of data points at each VISITNUM
 par(new = TRUE)
-barplot(height = num_points, width = 0.1, col=rgb(0.5, 0.5, 0.5, 0.5), space = 0.05, axes = FALSE)
+barplot(height = num_points, width = 0.01, col=rgb(0.5, 0.5, 0.5, 0.5), space = 5, axes = FALSE)
 axis(side = 4, at = axTicks(4), labels = axTicks(4))
+mtext("Sample Size", side=4, line=3)
 
+par(mar = c(5, 4, 4, 5) + 0.1)
 plot(1:num_visits, PC2s[1, ], type = "l", col = 1, xlab = "Visit", ylab = "PC2", xlim = c(1, num_visits), ylim = range(PC2s), main = "PC2 Weights")
 
 for (row in 2:num_features) {
@@ -335,15 +338,19 @@ for (row in 2:num_features) {
 }
 
 par(new = TRUE)
-barplot(height = num_points, width = 0.1, col=rgb(0.5, 0.5, 0.5, 0.5), space = 0.05, axes = FALSE)
+barplot(height = num_points, width = 0.01, col=rgb(0.5, 0.5, 0.5, 0.5), space = 5, axes = FALSE)
 axis(side = 4, at = axTicks(4), labels = axTicks(4))
+mtext("Sample Size", side=4, line=3)
 # You're looking at how each variable loads onto the first two PCs and seeing how that loading varies with time. 
 # NSAA claims that we have a 1d measure of disease severity
 # do not look at VISITNUM=9 because there were only 3 patients remaining
 # might explain why a lot of components go to zero
 # the weights are probably only reliable until the 6th visit approx
 ```
-These plots show that when we do scale adding the components equally makes sense, but what is currently being done is not accounting for the variances of each component! maybe plot this when scale=FALSE.
+These plots show that when we apply scale=TRUE adding the components equally makes sense (the distribution of loadings around each component is ), but what is currently being done is not accounting for the variances of each component! maybe plot this when scale=FALSE.
+
+```{r}
+```
 
 We calculate the correlation parameter using gls on the total NSAA score.
 ```{r}
