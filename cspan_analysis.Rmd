@@ -200,7 +200,7 @@ selected_items <- c(1, 10,16, 17)
 cov_subset <- cov_matrix[selected_items, selected_items]
 latex_table <- xtable(cov_subset)
 print(latex_table)
-print(diag(cov_matrix))
+print(cov_matrix)
 ```
 
 ```{r, cache=TRUE}
