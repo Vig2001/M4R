@@ -23,6 +23,7 @@ library(forecast)
 library(lcmm)
 library(lmeInfo)
 library(boot)
+library(xtable)
 rs <- read_csv("rs.csv")
 ```
 
@@ -194,7 +195,12 @@ In this setting, we have that each component of the NSAA takes a value of 0, 1 o
 
 ```{r, cache=TRUE}
 # print out the variances from the covariance matrix
-print(diag(cov(X0))) # <- some evidence for scale=TRUE (variances of each component do be different).
+cov_matrix <- cov(X0)# <- some evidence for scale=TRUE (variances of each component do be different).
+selected_items <- c(1, 10,16, 17)
+cov_subset <- cov_matrix[selected_items, selected_items]
+latex_table <- xtable(cov_subset)
+print(latex_table)
+print(diag(cov_matrix))
 ```
 
 ```{r, cache=TRUE}
