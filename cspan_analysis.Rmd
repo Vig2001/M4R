@@ -24,6 +24,7 @@ library(lcmm)
 library(lmeInfo)
 library(boot)
 library(xtable)
+library(gridExtra)
 rs <- read_csv("rs.csv")
 ```
 
@@ -200,7 +201,7 @@ selected_items <- c(1, 10,16, 17)
 cov_subset <- cov_matrix[selected_items, selected_items]
 latex_table <- xtable(cov_subset)
 print(latex_table)
-print(cov_matrix)
+print(diag(cov_matrix))
 ```
 
 ```{r, cache=TRUE}
@@ -249,12 +250,20 @@ return(plot)
   #dir.create("plots")
 #}
 
-for (test_component in RSTEST_classes){
-  plot <- plot_ternary(test_component)
+#for (test_component in RSTEST_classes){
+  #plot <- plot_ternary(test_component)
   #filename <- paste("plots/", test_component, ".png", sep = "")
   #ggsave(filename, plot, device = "png")
-  print(plot)
-}
+  #print(plot)
+#}
+
+test_components <- c("NSAA1-Stand", "NSAA1-Walk", "NSAA1-Rise From Floor", "NSAA1-Run (10m)")
+
+# Generate plots
+plots <- lapply(test_components, plot_ternary)
+
+grid_plot <- grid.arrange(grobs = plots, ncol = 2, nrow = 2,
+                          heights=c(10, 10), widths=c(10, 10))
 ```
 
 Now that we have reached a conclusion we will perform PCA using scale = TRUE!
