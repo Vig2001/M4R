@@ -25,6 +25,7 @@ library(lmeInfo)
 library(boot)
 library(xtable)
 library(gridExtra)
+library(ggrepel)
 rs <- read_csv("rs.csv")
 ```
 
@@ -231,6 +232,27 @@ corrheatmap <- ggplot(data = long_cov_matrix, aes(x = variable, y = variable2, f
   labs(x = "NSAA Item 1", y = "NSAA Item 2", fill = "Covariance")
 
 ggsave("plots/corrheatmap.png", corrheatmap)
+```
+```{r}
+# Mean Variance relationship
+
+# Remove 'NSAA1-' from column names
+colnames(X0) <- gsub("NSAA1-", "", colnames(X0))
+print(colnames(X0))
+# Create data frame with updated column names
+feature_stats <- data.frame(
+  feature = colnames(X0),
+  mean = apply(X0, 2, mean),
+  variance = apply(X0, 2, var)
+)
+
+# Create scatter plot
+mvarplot <- ggplot(feature_stats, aes(x = mean, y = variance, label = feature)) +
+  geom_point() +
+  geom_label_repel(nudge_y = 0.05, box.padding = 0.35, point.padding = 0.5, segment.color = 'grey50') +  # Adjust label repel settings for better readability
+  labs(x = "Mean", y = "Variance", title = "Mean-Variance Relationship of each NSAA Item") +
+  theme_minimal()
+ggsave("plots/mvarplot.png", mvarplot)
 ```
 
 ```{r, cache=TRUE}
