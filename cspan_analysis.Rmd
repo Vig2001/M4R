@@ -195,13 +195,42 @@ Should we use scale = TRUE or scale = FALSE? scale = TRUE will standardize each 
 In this setting, we have that each component of the NSAA takes a value of 0, 1 or 2 and so are on the same scale. However, one task may be inherently easier to do than the other, and so has an abnormally higher frequency of 2s. So, to answer the question scale = TRUE or FALSE, we have to investigate the proportion of 0s, 1s and 2s for each component (outputted as barycentric coordinates), as well as the variance-covariance matrix to formulate a robust conclusion.
 
 ```{r, cache=TRUE}
-# print out the variances from the covariance matrix
-cov_matrix <- cov(X0)# <- some evidence for scale=TRUE (variances of each component do be different).
-selected_items <- c(1, 10,16, 17)
-cov_subset <- cov_matrix[selected_items, selected_items]
-latex_table <- xtable(cov_subset)
-print(latex_table)
-print(diag(cov_matrix))
+# create covariance heatmap
+cor_matrix <- cov(X0)
+cov_matrix_df <- as.data.frame(cov_matrix)
+
+# Remove prefix and update names in cov_matrix_df
+names(cov_matrix_df) <- gsub("NSAA1-", "", names(cov_matrix_df))
+print(names(cov_matrix_df))
+# Define the desired custom order (ensure these exactly match the actual variable names after prefix removal)
+custom_order <- c("Walk", "Stand Up From Chair", "Run (10m)", "Stand", "Stand on Heels",
+                  "Rise From Floor", "Jump", "Lifts Head", "Get to Sitting",
+                  "Descend Box Step - Right", "Descend Box Step - Left",
+                  "Climb Box Step - Right", "Climb Box Step - Left",
+                  "Stand on One Leg - Right", "Stand on One Leg - Left",
+                  "Hop Right Leg", "Hop Left Leg")
+
+# Generate the order index for the dataframe
+ordered_indices <- match(custom_order, names(cov_matrix_df))
+cov_matrix_df <- cov_matrix_df[ordered_indices, ordered_indices]
+# Reorder the covariance matrix based on these indices
+rownames(cov_matrix_df) <- custom_order 
+cov_matrix_df$variable <- rownames(cov_matrix_df)
+
+
+# Melt the data frame for ggplot
+long_cov_matrix <- pivot_longer(cov_matrix_df, cols = -variable, names_to = "variable2", values_to = "cov_value")
+
+# Plot the heatmap
+corrheatmap <- ggplot(data = long_cov_matrix, aes(x = variable, y = variable2, fill = cov_value)) +
+  geom_tile() +
+  scale_fill_gradient2(mid = "white", high = "red", low = "blue", midpoint = 0) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 10), 
+        axis.text.y = element_text(angle = 0, size = 10)) +
+  labs(x = "NSAA Item 1", y = "NSAA Item 2", fill = "Covariance")
+
+ggsave("plots/corrheatmap.png", corrheatmap)
 ```
 
 ```{r, cache=TRUE}
@@ -256,14 +285,6 @@ return(plot)
   #ggsave(filename, plot, device = "png")
   #print(plot)
 #}
-
-test_components <- c("NSAA1-Stand", "NSAA1-Walk", "NSAA1-Rise From Floor", "NSAA1-Run (10m)")
-
-# Generate plots
-plots <- lapply(test_components, plot_ternary)
-
-grid_plot <- grid.arrange(grobs = plots, ncol = 2, nrow = 2,
-                          heights=c(10, 10), widths=c(10, 10))
 ```
 
 Now that we have reached a conclusion we will perform PCA using scale = TRUE!
