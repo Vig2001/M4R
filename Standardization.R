@@ -18,10 +18,10 @@ data_std$height <-
   (data_std$height - mean(data_std$height)) / sd(data_std$height)
 
 # PCA on raw centered data
-pca_raw <- prcomp(data, scale = FALSE, center = TRUE)
+pca_raw <- prcomp(data_centered, scale = FALSE)
 
 # PCA on standardized data (also centered)
-pca_std <- prcomp(data, scale = TRUE, center = TRUE)
+pca_std <- prcomp(data_std, scale = TRUE)
 
 # Plotting for raw PCA
 p1 <- ggplot(data_centered, aes(x=wrist_width, y=height)) +
@@ -29,18 +29,23 @@ p1 <- ggplot(data_centered, aes(x=wrist_width, y=height)) +
   geom_segment(aes(x = - 20 * pca_raw$rotation[1,1],
                    y = - 20 * pca_raw$rotation[2,1],
                    xend = 20 * pca_raw$rotation[1,1],
-                   yend = 20 * pca_raw$rotation[2,1]),
-               arrow = arrow(length = unit(0.5, "cm")), color = "red") +
+                   yend = 20 * pca_raw$rotation[2,1],
+                   color = "PC1"), size = 1.1,
+               arrow = arrow(length = unit(0.5, "cm"))) +
   geom_segment(aes(x = - 1 * pca_raw$rotation[1,2],
                    y = - 1 * pca_raw$rotation[2,2],
                    xend = 1 * pca_raw$rotation[1,2],
-                   yend = 1 * pca_raw$rotation[2,2]),
-               arrow = arrow(length = unit(0.5, "cm")), color = "blue") +
-  xlim(-10, 10) +
-  ylim(-50, 50) +
+                   yend = 1 * pca_raw$rotation[2,2],
+                   color = "PC2"), size = 1.1,
+               arrow = arrow(length = unit(0.5, "cm"))) +
+  xlim(-2, 2) +
+  ylim(-25, 25) +
   labs(title = "Raw Centered Data",
        x = "Human Wrist Width (cm)", y = "Human Height (cm)") +
-  theme_classic()
+  scale_color_manual(values = c("PC1" = "red", "PC2" = "blue")) +
+  theme_classic() +
+  theme(legend.position = "bottom") +
+  guides(color = guide_legend(title = ""))  
 
 # Plotting for standardized PCA
 p2 <- ggplot(data_std, aes(x=wrist_width, y=height)) +
@@ -48,18 +53,21 @@ p2 <- ggplot(data_std, aes(x=wrist_width, y=height)) +
   geom_segment(aes(x = - 2 * pca_std$rotation[1,1],
                    y = - 2 * pca_std$rotation[2,1],
                    xend = 2 * pca_std$rotation[1,1],
-                   yend = 2 * pca_std$rotation[2,1]),
-               arrow = arrow(length = unit(0.5, "cm")), color = "red") +
-  geom_segment(aes(x = - 1 * pca_std$rotation[1,2],
-                   y = - 1 * pca_std$rotation[2,2],
-                   xend = 1 * pca_std$rotation[1,2],
-                   yend = 1 * pca_std$rotation[2,2]),
-               arrow = arrow(length = unit(0.5, "cm")), color = "blue") +
-  xlim(-10, 10) +
-  ylim(-10, 10) +
+                   yend = 2 * pca_std$rotation[2,1],
+                   color = "PC1"), size = 1.1,
+               arrow = arrow(length = unit(0.5, "cm"))) +
+  geom_segment(aes(x = - 2 * pca_std$rotation[1,2],
+                   y = - 2 * pca_std$rotation[2,2],
+                   xend = 2 * pca_std$rotation[1,2],
+                   yend = 2 * pca_std$rotation[2,2],
+                   color = "PC2"), size = 1.1,
+               arrow = arrow(length = unit(0.5, "cm"))) +
+  xlim(-2, 2) +
+  ylim(-6, 6) +
   labs(title = "Standardized Data",
        x = "Human Wrist Width", y = "Human Height") +
-  theme_classic()
+  scale_color_manual(values = c("PC1" = "red", "PC2" = "blue")) +
+  theme_classic() +
+  theme(legend.position = "bottom") +
+  guides(color = guide_legend(title = ""))
 
-print(p1)
-print(p2)
