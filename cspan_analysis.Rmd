@@ -234,25 +234,36 @@ corrheatmap <- ggplot(data = long_cov_matrix, aes(x = variable, y = variable2, f
 ggsave("plots/corrheatmap.png", corrheatmap)
 ```
 ```{r}
-# Mean Variance relationship
 
-# Remove 'NSAA1-' from column names
+
+# Assuming X0 is your data frame and it's already loaded and processed
 colnames(X0) <- gsub("NSAA1-", "", colnames(X0))
-print(colnames(X0))
+
 # Create data frame with updated column names
 feature_stats <- data.frame(
   feature = colnames(X0),
-  mean = apply(X0, 2, mean),
+  prop_mean = apply(X0, 2, mean) / 2,
   variance = apply(X0, 2, var)
 )
 
-# Create scatter plot
-mvarplot <- ggplot(feature_stats, aes(x = mean, y = variance, label = feature)) +
-  geom_point() +
-  geom_label_repel(nudge_y = 0.05, box.padding = 0.35, point.padding = 0.5, segment.color = 'grey50') +  # Adjust label repel settings for better readability
-  labs(x = "Mean", y = "Variance", title = "Mean-Variance Relationship of each NSAA Item") +
-  theme_minimal()
-ggsave("plots/mvarplot.png", mvarplot)
+# Define the range of means to plot the Bernoulli relationship over
+mean_range <- seq(min(feature_stats$prop_mean), max(feature_stats$prop_mean), length.out = length(feature_stats$prop_mean))
+bernoulli_variance <- 2 * mean_range * (1 - mean_range)  # Bernoulli variance across the range
+
+# Create scatter plot with actual data and Bernoulli relationship
+mvarplot <- ggplot(feature_stats, aes(x = prop_mean, y = variance, label = feature)) +
+  geom_point() +  # Actual data points
+  geom_label_repel(nudge_y = 0.05, box.padding = 0.35, point.padding = 0.5, segment.color = 'grey50') +
+  geom_line(aes(x = mean_range, y = bernoulli_variance, color = " (x2) Bernoulli Mean-Variance Relationship"), linetype = "dashed") + # Expected Bernoulli relationship
+  labs(x = "Mean Proportion", y = "Variance", title = "Mean-Variance Relationship of each NSAA Item") +
+  theme_minimal() +
+  theme(legend.position = "bottom") +
+  guides(color = guide_legend(title = NULL))
+
+# Save the plot
+ggsave("plots/mvarplot.png", mvarplot, width = 8, height = 6)
+
+print(mvarplot)
 ```
 
 ```{r, cache=TRUE}
