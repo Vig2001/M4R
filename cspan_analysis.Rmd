@@ -355,11 +355,13 @@ fviz_screeplot(pca_facto, addlabels = TRUE, ylim = c(0, 100),
 #ggsave("plots/scree_plot.png")
 
 # Generate and save biplot
-fviz_pca_biplot(pca_facto, geom = "point", col.var = "contrib", 
-                gradient.cols = rainbow(ncol(X0)), 
+my_biplot <- fviz_pca_biplot(pca_facto, geom = "point", col.var = "contrib", 
+                gradient.cols = c("#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#7f7f7f", "#bcbd22", "#17becf"), 
                 repel = TRUE, arrow.len = 0.001, 
-                label = "var", cex = 0.5)
-#ggsave("plots/biplot.png")
+                label = "var", cex = 0.5, pointsize = 2, labelsize = 5, 
+                repel.box.padding = 0.2, repel.segment.size = 0.3)
+
+ggsave("plots/biplot.png", my_biplot, width = 10, height = 8, dpi = 300)
 
 # loadings matrix
 loadings_matrix_facto <- pca_facto$var$coord
