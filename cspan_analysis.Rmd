@@ -350,9 +350,9 @@ pca_facto <- PCA(X0, graph = FALSE)
 #}
 
 # Generate and save scree plot
-fviz_screeplot(pca_facto, addlabels = TRUE, ylim = c(0, 100), 
+my_screeplot <- fviz_screeplot(pca_facto, addlabels = TRUE, ylim = c(0, 100), 
                main = "Scree Plot")
-#ggsave("plots/scree_plot.png")
+ggsave("plots/scree_plot.png", my_screeplot, width=10, height=8, dpi=300)
 
 # Generate and save biplot
 my_biplot <- fviz_pca_biplot(pca_facto, geom = "point", col.var = "contrib", 
