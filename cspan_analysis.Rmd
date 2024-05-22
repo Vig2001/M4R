@@ -205,57 +205,34 @@ ggsave("plots/corrheatmap.png", corrheatmap, height=10, width=8, dpi=300)
 ```
 
 ```{r}
-# Define the desired custom order (ensure these exactly match the actual variable names after prefix removal)
-custom_order <- c("Walk", "Stand Up From Chair", "Run (10m)", "Stand", "Stand on Heels",
-                  "Rise From Floor", "Jump", "Lifts Head", "Get to Sitting",
-                  "Descend Box Step - Right", "Descend Box Step - Left",
-                  "Climb Box Step - Right", "Climb Box Step - Left",
-                  "Stand on One Leg - Right", "Stand on One Leg - Left",
-                  "Hop Right Leg", "Hop Left Leg")
-
-# Generate the order index for the dataframe
-ordered_indices <- match(custom_order, names(cov_matrix_df))
-cov_matrix_df <- cov_matrix_df[ordered_indices, ordered_indices]
-# Reorder the covariance matrix based on these indices
-rownames(cov_matrix_df) <- custom_order 
-cov_matrix_df$variable <- rownames(cov_matrix_df)
-
-
-# Melt the data frame for ggplot
-long_cov_matrix <- pivot_longer(cov_matrix_df, cols = -variable, names_to = "variable2", values_to = "cov_value")
-
-# Plot the heatmap
-#corrheatmap <- ggplot(data = long_cov_matrix, aes(x = variable, y = variable2, fill = cov_value)) +
-  geom_tile() +
-  scale_fill_gradient2(mid = "white", high = "red", low = "blue", midpoint = 0) +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 10), 
-        axis.text.y = element_text(angle = 0, size = 10)) +
-  labs(x = "NSAA Item 1", y = "NSAA Item 2", fill = "Covariance")
-```
-
-```{r}
-
-
-# Assuming X0 is your data frame and it's already loaded and processed
 colnames(X0) <- gsub("NSAA1-", "", colnames(X0))
 
 # Create data frame with updated column names
 feature_stats <- data.frame(
   feature = colnames(X0),
   prop_mean = apply(X0, 2, mean) / 2,
+  prop_mean2 = (apply(X0, 2, mean) / 2)**2,
   variance = apply(X0, 2, var)
 )
 
 # Define the range of means to plot the Bernoulli relationship over
 mean_range <- seq(min(feature_stats$prop_mean), max(feature_stats$prop_mean), length.out = length(feature_stats$prop_mean))
+
+# find the best fitting curve by plotting variance against p(1-p) because they are proportional
+
+mvar_lm <- lm(variance ~ prop_mean + prop_mean2, data = feature_stats)
+summary(mvar_lm)
+# optimal dispersion parameter is roughly 2.
+```
+
+```{r}
 bernoulli_variance <- 2 * mean_range * (1 - mean_range)  # Bernoulli variance across the range
 
 # Create scatter plot with actual data and Bernoulli relationship
 mvarplot <- ggplot(feature_stats, aes(x = prop_mean, y = variance, label = feature)) +
   geom_point() +  # Actual data points
   geom_label_repel(nudge_y = 0.05, box.padding = 0.35, point.padding = 0.5, segment.color = 'grey50') +
-  geom_line(aes(x = mean_range, y = bernoulli_variance, color = " (x2) Bernoulli Mean-Variance Relationship"), linetype = "dashed") + # Expected Bernoulli relationship
+  geom_line(aes(x = mean_range, y = bernoulli_variance, color = "Bin(2, p)"), linetype = "dashed") + # Expected Bernoulli relationship
   labs(x = "Mean Proportion", y = "Variance", title = "Mean-Variance Relationship of each NSAA Item") +
   theme_minimal() +
   theme(legend.position = "bottom") +
