@@ -400,13 +400,13 @@ The distribution of principal component weights of each component at a specific 
 ```{r}
 # plot trajectory of the weight for each component within PC1 and PC2 against time points
 
-num_visits =  7 #length(unique(rs_1005$VISITNUM))
+num_visits =  6 #length(unique(rs_1005$VISITNUM))
 num_features = length(RSTEST_list)
 PC1s_f <- matrix(NA, nrow=num_features, ncol=num_visits)
 PC2s_f <- matrix(NA, nrow=num_features, ncol=num_visits)
 num_points <- rep.int(0, times=num_visits)
 #sort(unique(rs_1005$VISITNUM)
-for (v in 0:6){
+for (v in 0:5){
   X <- create_matrix(rs_1005, v)
   pca <- PCA(X, graph = FALSE, scale.unit = FALSE) 
   PC1 <- pca$var$coord[ ,1]
@@ -416,30 +416,25 @@ for (v in 0:6){
   num_points[v+1] <- nrow(X)
 }
 
-par(mar = c(5, 4, 4, 5) + 0.1)
+png("plots/PC1s_unscaled.png", width = 5000, height = 2000, res = 300)
+par(mar = c(5, 4, 4, 2) + 0.1, oma = c(0, 0, 0, 18), cex.lab=1.6, cex.main=2.4)
 # PC1s
-plot(1:num_visits, PC1s_f[1, ], type = "l", col = 1, xlab = "Visit", ylab = "PC1", xlim = c(1, num_visits), ylim = range(PC1s_f), main = "PC1 Weights (Unscaled)")
+plot(1:num_visits, PC1s_f[1, ], type = "l", col = 1, xlab = "Visit", ylab = "PC1", xlim = c(1, num_visits), ylim = range(PC1s), main = "PC1 Weights (Scaled)")
 for (row in 2:num_features) {
   lines(1:num_visits, PC1s_f[row, ], col = row)
 }
+legend("right", inset = -0.3, legend = RSTEST_list, col = 1:num_features, lty = 1, xpd = NA, cex = 1)
+dev.off()
 
-# Bars to illustrate the number of data points at each VISITNUM
-par(new = TRUE)
-barplot(height = num_points, width = 0.01, col=rgb(0.5, 0.5, 0.5, 0.5), space = 5, axes = FALSE)
-axis(side = 4, at = axTicks(4), labels = axTicks(4))
-mtext("Sample Size", side=4, line=3)
-
-par(mar = c(5, 4, 4, 5) + 0.1)
-plot(1:num_visits, PC2s_f[1, ], type = "l", col = 1, xlab = "Visit", ylab = "PC2", xlim = c(1, num_visits), ylim = range(PC2s_f), main = "PC2 Weights (Unscaled)")
-
+png("plots/PC2s_unscaled.png", width = 5000, height = 2000, res = 300)
+par(mar = c(5, 4, 4, 2) + 0.1, oma = c(0, 0, 0, 18), cex.lab=1.6, cex.main=2.4)
+# PC1s
+plot(1:num_visits, PC2s_f[1, ], type = "l", col = 1, xlab = "Visit", ylab = "PC1", xlim = c(1, num_visits), ylim = range(PC1s), main = "PC1 Weights (Scaled)")
 for (row in 2:num_features) {
   lines(1:num_visits, PC2s_f[row, ], col = row)
 }
-
-par(new = TRUE)
-barplot(height = num_points, width = 0.01, col=rgb(0.5, 0.5, 0.5, 0.5), space = 5, axes = FALSE)
-axis(side = 4, at = axTicks(4), labels = axTicks(4))
-mtext("Sample Size", side=4, line=3)
+legend("right", inset = -0.3, legend = RSTEST_list, col = 1:num_features, lty = 1, xpd = NA, cex = 1)
+dev.off()
 ```
 When we don't apply scaling to our principal component analysis, we see a very sparse distribution in the weights of both principal components through time. This further damages the rationale behind adding up the components equally to give a total NSAA score out of 34.
 
