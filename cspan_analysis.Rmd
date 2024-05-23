@@ -419,7 +419,7 @@ for (v in 0:5){
 png("plots/PC1s_unscaled.png", width = 5000, height = 2000, res = 300)
 par(mar = c(5, 4, 4, 2) + 0.1, oma = c(0, 0, 0, 18), cex.lab=1.6, cex.main=2.4)
 # PC1s
-plot(1:num_visits, PC1s_f[1, ], type = "l", col = 1, xlab = "Visit", ylab = "PC1", xlim = c(1, num_visits), ylim = range(PC1s_f), main = "PC1 Weights (Scaled)")
+plot(1:num_visits, PC1s_f[1, ], type = "l", col = 1, xlab = "Visit", ylab = "PC1", xlim = c(1, num_visits), ylim = range(PC1s_f), main = "PC1 Weights (Raw)")
 for (row in 2:num_features) {
   lines(1:num_visits, PC1s_f[row, ], col = row)
 }
@@ -429,7 +429,7 @@ dev.off()
 png("plots/PC2s_unscaled.png", width = 5000, height = 2000, res = 300)
 par(mar = c(5, 4, 4, 2) + 0.1, oma = c(0, 0, 0, 18), cex.lab=1.6, cex.main=2.4)
 # PC1s
-plot(1:num_visits, PC2s_f[1, ], type = "l", col = 1, xlab = "Visit", ylab = "PC1", xlim = c(1, num_visits), ylim = range(PC2s_f), main = "PC1 Weights (Scaled)")
+plot(1:num_visits, PC2s_f[1, ], type = "l", col = 1, xlab = "Visit", ylab = "PC1", xlim = c(1, num_visits), ylim = range(PC2s_f), main = "PC1 Weights (Raw)")
 for (row in 2:num_features) {
   lines(1:num_visits, PC2s_f[row, ], col = row)
 }
