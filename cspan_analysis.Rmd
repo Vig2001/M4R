@@ -321,7 +321,7 @@ print(loadings_matrix[,1:2])
 
 ```{r, warning=FALSE}
 # nicer plots
-pca_facto <- PCA(X0, graph = FALSE, scale.unit=TRUE)
+pca_facto <- PCA(X0, graph = FALSE, scale.unit=FALSE)
 
 #if (!dir.exists("plots")) {
   #dir.create("plots")
@@ -330,7 +330,7 @@ pca_facto <- PCA(X0, graph = FALSE, scale.unit=TRUE)
 # Generate and save scree plot
 my_screeplot <- fviz_screeplot(pca_facto, addlabels = TRUE, ylim = c(0, 100), 
                main = "Scree Plot")
-#ggsave("plots/scree_plot.png", my_screeplot, width=10, height=8, dpi=300)
+ggsave("plots/scree_plot_raw.png", my_screeplot, width=10, height=8, dpi=300)
 
 # Generate and save biplot
 my_biplot <- fviz_pca_biplot(pca_facto, geom = "point", col.var = "contrib", 
@@ -339,12 +339,12 @@ my_biplot <- fviz_pca_biplot(pca_facto, geom = "point", col.var = "contrib",
                 label = "var", cex = 0.5, pointsize = 2, labelsize = 5, 
                 repel.box.padding = 0.2, repel.segment.size = 0.3)
 
-#ggsave("plots/biplot.png", my_biplot, width = 10, height = 8, dpi = 300)
+ggsave("plots/biplot_raw.png", my_biplot, width = 10, height = 8, dpi = 300)
 
 # loadings matrix
 loadings_matrix_facto <- pca_facto$var$coord
 
-print(loadings_matrix_facto[, 1:2]) # loadings are a factor of e off prcomp - ask chris about this
+print(my_biplot) # loadings are a factor of e off prcomp - ask chris about this
 ```
 
 ```{r, warning=FALSE}
