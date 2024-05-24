@@ -453,8 +453,6 @@ rs_1005_nsaa <- rs_1005_nsaa %>%
   ))
 
 # now we can define the gls model
-# we use corAR1 instead of corCAR1 because weeks would be discrete - need to ask chris about this
-
 # remove duplicated rows
 rs_1005_nsaa <- rs_1005_nsaa %>% distinct(USUBJID, VISIT, 
                                                 .keep_all = TRUE)
@@ -467,12 +465,20 @@ nsaa_total_gls <- gls(RSORRES ~ 1 + VISIT + I(VISIT^2),
                         data = rs_1005_nsaa, 
                         correlation = corAR1(form = ~ 1 | USUBJID))
 
-# the correlation under visit is just the correlation between visit and the intercept.
+# the correlation under visit is just the correlation between visit coefficient and the intercept.
 summary(nsaa_total_gls)
+```
 
-# get the phi parameter from the data and perform bootstrap
-gls_phi <- function(data, indices){
-  boot_data = rs_1005_nsaa[indices, ]
+Perform bootstrapping
+```{r}
+# manually perform bootstrap to get the autocorrelation parameter
+patient_ids <- unique(rs_1005_nsaa$USUBJID)
+boot_phis <- rep(0, 1000)
+
+# define function that gets the phi parameter in a boot sample
+gls_phi <- function(patient_ids){
+  # choose only the patients that appear in the bootstrap sample
+  boot_data = rs_1005_nsaa %>% filter(USUBJID %in% unique(patient_ids))
   # model grouped by each patient so different patients aren't correlated
   gls_model <- gls(RSORRES ~ 1 + VISIT + I(VISIT^2), 
                         data = boot_data, 
@@ -482,13 +488,20 @@ gls_phi <- function(data, indices){
   return(as.numeric(phi))
 }
 
-set.seed(123) 
+for (reps in 1:1000){
+  # sample with replacement from patient_ids
+  boot_indices <- sample(1:131, size = 131, replace = TRUE)
+  boot_patients <- patient_ids[boot_indices]
+  boot_phi <- gls_phi(boot_patients)
+  boot_phis[reps] <- boot_phi
+}
+
 # 1000 bootstrap samples
-bootstrap_results <- boot(data = rs_1005_nsaa, statistic = gls_phi, R = 1000)
+#bootstrap_results <- boot(data = rs_1005_nsaa, statistic = gls_phi, R = 1000)
 # histogram of results
-hist(bootstrap_results$t, breaks = 30, main = "Histogram of Phi Parameters",
+hist(boot_phis, breaks = 30, main = "Histogram of Phi Parameters",
      xlab = "Phi Parameter")
-mean_phi <- mean(bootstrap_results$t)
+mean_phi <- mean(boot_phis)
 print(mean_phi)
 ```
 
@@ -523,9 +536,7 @@ residuals_nsaa <- residuals(nsaa_uncorrelated_gls)
 pacf(residuals_nsaa, lag.max=10, main="PACF of Uncorrelated Residuals")
 ```
 
-The summary indicates an AR(1) correlation structure in your GLS model, with a high phi estimate of 0.9639783, suggesting strong correlation between the nsaa scores of a single patient between two visits (i.e. 12 weeks apart).
-
-The negative correlation for VISIT outputted by the summary signifies the correlation between the random effects and the error of each observation. The random effects in the model (as specified above) is the patients themselves i.e. the only grouping structure we hypothesize is groups containing one patient each. Ideally this should be zero because the error in an NSAA measurement at a particular time of a particular patient should not be correlated to the patient that the measurement comes from (random effect).
+The summary indicates an AR(1) correlation structure in our GLS model, with a high phi estimate of 0.9639783, suggesting strong correlation between the nsaa scores of a single patient between two visits (i.e. 12 weeks apart). This is as expected because someone who scores highest at visit 1 (arbitrary) is likely to score highest at visit 2, regardless of the stage of disease. Correlation is independent of the trend.
 
 Let's interpret the standardized residuals analysis. Upon analysing both standardized residuals vs the fitted values graphs with and without the VISIT grouping structure, we can conclude that there is no obvious grouping of subjects through time i.e. not enough evidence to suggest a clustering of trajectories. The fitted values in this sense are the NSAA total scores - so one can visualise time essentially moving in the reverse direction to the fitted values such that the last vertical line of points represents the baseline measurement. We can make this deduction by examining the plots for each VISIT - by comparing the sets of plots with the "overarching" plot we can see that each VISIT make up the vertical "pillars" observed. The standardized residuals follow a standard normal distribution for each visit (as illustrated by the qqnorm plot) which backs our model specification and once again undermines the clustering claim. For an obvious grouping structure to be present we would've expected certain residual points being bunched up together at each visit point, but this is not completely obvious from the plots and would've drastically affected the qqnorm plot. 
 
@@ -567,41 +578,42 @@ summaryplot(lctm_1, lctm_2, lctm_3, lctm_4)
 ```
 We will investigate how the size of the treatment effect affects its significance in the model
 ```{r}
-treatment_effect_fn <- function(data, num_bootstraps){
+treatment_effect_fn <- function(data, num_bootstraps) {
   p_values <- numeric(num_bootstraps)
-  for (i in 1:num_bootstraps){
-    # bootstrap
-    sampled_data <- data[sample(nrow(data), replace = TRUE), ]
-    num_patients <- length(unique(sampled_data$USUBJID))
-    # randomly select half of the bootstrap sample
-    selected_patients <- sample(unique(rs_1005_nsaa$USUBJID),
-                                size = num_patients / 2)
-    # Define the treatment effect
-    treatment_effect <- 5
-    # record treatment
-    sampled_data$TREAT <- ifelse(sampled_data$USUBJID %in% selected_patients, 1, 0)
-    # simple translation to the scores
-    sampled_data$RSORRES <- ifelse(sampled_data$USUBJID %in% selected_patients,
-                                 sampled_data$RSORRES + treatment_effect,
-                                 sampled_data$RSORRES)
-    gls_model <- gls(RSORRES ~ 1 + VISIT + I(VISIT^2) + TREAT, 
-                          data = sampled_data, 
-                          correlation = corAR1(form = ~ 1 | USUBJID))
+  patient_ids <- unique(data$USUBJID)  # Get unique patient IDs once
+
+  for (i in 1:num_bootstraps) {
+    # Bootstrap: Sample patient IDs with replacement
+    boot_patients <- sample(patient_ids, size = length(patient_ids), replace = TRUE)
+    
+    # Filter data to only include sampled patient IDs
+    sampled_data <- data %>% filter(USUBJID %in% boot_patients)
+    
+    # Randomly select half of the bootstrap sample for treatment
+    selected_patients <- sample(boot_patients, size = length(boot_patients) / 2)
+    
+    # Assign treatment of 5 and adjust scores
+    sampled_data <- sampled_data %>%
+      mutate(TREAT = ifelse(USUBJID %in% selected_patients, 1, 0),
+             RSORRES = ifelse(TREAT == 1, RSORRES + 5, RSORRES))
+    
+    # Fit the GLS model
+    gls_model <- gls(RSORRES ~ 1 + VISIT + I(VISIT^2) + TREAT, data = sampled_data, 
+                     correlation = corAR1(form = ~ 1 | USUBJID))
     summary_gls <- summary(gls_model)
-    # Extract coefficients and standard errors
+    
+    # Extract p-value
     coefficients <- summary_gls$tTable[, "Value"]
     standard_errors <- summary_gls$tTable[, "Std.Error"]
-    
-    # Calculate p_value
     z_scores <- coefficients / standard_errors
-    # We assume that with treatment the NSAA mean is larger hence lower.tail=FALSE
     p_values[i] <- 2 * pnorm(abs(z_scores["TREAT"]), lower.tail = FALSE)
   }
+  
   return(p_values)
 }
 
 set.seed(123)
-bootstrap_p_values <- treatment_effect_fn(rs_1005_nsaa, num_bootstraps = 500)
+bootstrap_p_values <- treatment_effect_fn(rs_1005_nsaa, num_bootstraps = 1000)
 sig_values <- sum(bootstrap_p_values < 0.05) / length(bootstrap_p_values)
 
 # Plot the p-values
@@ -611,8 +623,9 @@ ggplot(data.frame(PValue = bootstrap_p_values), aes(x = PValue)) +
   labs(title = "Distribution of P-Values from Bootstrap", x = "P-Value", y = "Frequency")
 
 print(sig_values)
+
 ```
-Here we print out the proportion of significant p-values (i.e. p-values under 0.05). This is directly linked with the statistical power of the hypothesis test we are conducting, which is a test to investigate whether the treatment effect has an observable impact on the mean NSAA trajectories. When the proportion of significant p-values is close to 1 this illustrates we have a strong statistical test, which translates to the probability that the test correctly rejects the null hypothesis (in this scenario this is the hypothesis that the treatment effect has no observable impact). Therefore, if we have a proportion for \verb|sig_values| close to 1 then if there is indeed a treatment effect the test is high likely to detect it. Conversely, if it is closer to 0 then the test is unlikely to detect the treatment effect. We can see that a treatment effect of 5 gives us our desired result for a sample size of 131 patients. Now we must simulate how the sample size affects the power.
+Here we print out the proportion of significant p-values (i.e. p-values under 0.05). This is directly linked with the statistical power of the hypothesis test we are conducting, which is a test to investigate whether the treatment effect has an observable impact on the mean NSAA trajectories. When the proportion of significant p-values is close to 1 this illustrates we have a strong statistical test, which translates to the probability that the test correctly rejects the null hypothesis (in this scenario this is the hypothesis that the treatment effect has no observable impact). Therefore, if we have a proportion for \verb|sig_values| close to 1 then if there is indeed a treatment effect the test is high likely to detect it. Conversely, if it is closer to 0 then the test is unlikely to detect the treatment effect. We can see that a treatment effect of 5 gives us our desired result (3.6 gives us a proportion > 0.8) for a sample size of 131 patients. Now we must simulate how the sample size affects the power.
 
 ```{r}
 rho <- mean_phi # choose from previous work
