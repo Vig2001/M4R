@@ -461,7 +461,7 @@ rs_1005_nsaa <- rs_1005_nsaa %>% distinct(USUBJID, VISIT,
 rs_1005_nsaa$RSORRES <- as.numeric(rs_1005_nsaa$RSORRES)
 
 # output summary
-nsaa_total_gls <- gls(RSORRES ~ 1 + VISIT + I(VISIT^2), 
+nsaa_total_gls <- gls(RSORRES ~ poly(VISIT, 2), 
                         data = rs_1005_nsaa, 
                         correlation = corAR1(form = ~ 1 | USUBJID))
 
@@ -625,26 +625,26 @@ ggplot(data.frame(PValue = bootstrap_p_values), aes(x = PValue)) +
 print(sig_values)
 
 ```
-Here we print out the proportion of significant p-values (i.e. p-values under 0.05). This is directly linked with the statistical power of the hypothesis test we are conducting, which is a test to investigate whether the treatment effect has an observable impact on the mean NSAA trajectories. When the proportion of significant p-values is close to 1 this illustrates we have a strong statistical test, which translates to the probability that the test correctly rejects the null hypothesis (in this scenario this is the hypothesis that the treatment effect has no observable impact). Therefore, if we have a proportion for \verb|sig_values| close to 1 then if there is indeed a treatment effect the test is high likely to detect it. Conversely, if it is closer to 0 then the test is unlikely to detect the treatment effect. We can see that a treatment effect of 5 gives us our desired result (3.6 gives us a proportion > 0.8) for a sample size of 131 patients. Now we must simulate how the sample size affects the power.
+Here we print out the proportion of significant p-values (i.e. p-values under 0.05). This is an unbiased estimator for the statistical power of the hypothesis test we are conducting (the hypothesis test is essentially is there enough evidence to say that the mean trajectory of an untreated and treated patient is the same), which is a test to investigate whether the treatment effect has an observable impact on the mean NSAA trajectories. When the proportion of significant p-values is close to 1 this illustrates we have a strong statistical test, which translates to the probability that the test correctly rejects the null hypothesis (in this scenario this is the hypothesis that the treatment effect has no observable impact). Therefore, if we have a proportion for \verb|sig_values| close to 1 then if there is indeed a treatment effect the test is high likely to detect it. Conversely, if it is closer to 0 then the test is unlikely to detect the treatment effect. We can see that a treatment effect of 5 gives us our desired result (a proportion > 0.8) for a sample size of 131 patients. Now we must simulate how the sample size affects the power.
 
 ```{r}
 rho <- mean_phi # choose from previous work
 sigma <- 4 # modify std
 
 # Parameters
-N <- 1000 # Number of observations - 100 patients
+N <- 130 # Number of patients
 visits <- 1:10 # Visits from 1 to 10
-treatment_effect <- 2 # significant treatment effect
+treatment_effect <- 4
 
-# Using rough numbers - ask chris on this
-intercept <- 15
+# Using rough numbers
+intercept <- 16
 visit_coef <- 2.5
-visit_squared_coef <- -0.44
+visit_squared_coef <- -0.43
 
 # Ensure half of the patients are treated
 treatment_assignments <- sample(c(rep(1, N/2), rep(0, N/2)))
 
-# Simulate AR(1) residuals for one patient
+# Simulate AR(1) residuals for one patient (10 visits)
 simulate_ar1_residuals <- function(n, rho, sigma) {
   e <- rnorm(n, mean = 0, sd = sigma)
   residuals <- vector(length = n)
@@ -679,7 +679,7 @@ simulate_patient_data <- function(patient_id, treat, visits, rho, sigma) {
   )
 }
 
-# Simulate data for N trajectories = 10 * n patients
+# Simulate data for N patients and 10 visits
 patient_data <- lapply(1:N, function(i) {
   treat <- sample(c(0,1), 1)
   simulate_patient_data(i, treat, visits, rho, sigma)
@@ -694,13 +694,48 @@ gls_model <- gls(RSORRES ~ 1 + VISIT + I(VISIT^2) + TREAT,
 summary_gls <- summary(gls_model)
 print(summary_gls)
 ```
-Yet to do bootstrap analysis on how the size of the sample affects the observed significance of the treatment effect. But so far from experimenting with the treatment effect and size, a size of 100 patients (50 treated and 50 untreated) should be enough to distinguish between treated and untreated groups because the model can detect a significant treatment coefficient even when the true treatment effect is 0.5!
 
+```{r}
+# Function to perform bootstrap analysis
+bootstrap_analysis <- function(data, num_bootstraps) {
+  p_values <- numeric(num_bootstraps)
+  
+  for (i in 1:num_bootstraps) {
+    # Bootstrap: Sample with replacement by patient ID
+    boot_patient_ids <- sample(unique(data$USUBJID), size = length(unique(data$USUBJID)), replace = TRUE)
+    boot_data <- data %>% filter(USUBJID %in% boot_patient_ids)
+    
+    # Fit the GLS model on the bootstrapped data
+    gls_model <- gls(RSORRES ~ 1 + VISIT + I(VISIT^2) + TREAT, data = boot_data, 
+                     correlation = corAR1(form = ~ 1 | USUBJID))
+    summary_gls <- summary(gls_model)
+    
+    # Extract the p-value for the treatment effect
+    coefficients <- summary_gls$tTable[, "Value"]
+    standard_errors <- summary_gls$tTable[, "Std.Error"]
+    z_scores <- coefficients / standard_errors
+    p_values[i] <- 2 * pnorm(abs(z_scores["TREAT"]), lower.tail = FALSE)
+  }
+  
+  return(p_values)
+}
 
-# TO DO LIST
+# Simulate the original data if not already available
+set.seed(123)
+# Assuming rho, sigma, N are already defined from previous work
+# Simulate data here if necessary...
 
-1.) choose half of the patients and alter their trajectory to mimic a treatment effect- add a column for treatment, fit a gls model and see if you can identify whether someone got treated. Ultimately, you want to investigate how the size of the treatment effect affects the coefficient. Then bootstrap. To see how the sample size effects how easy it is to visualize the difference between treated and untreated patients.
+# Run bootstrap analysis
+set.seed(123)
+bootstrap_p_values <- bootstrap_analysis(simulated_data, num_bootstraps = 1000)
+sig_values <- sum(bootstrap_p_values < 0.05) / length(bootstrap_p_values)
 
-2.) Plot weights when scale=FALSE
+# Plot the distribution of p-values
+ggplot(data.frame(PValue = bootstrap_p_values), aes(x = PValue)) +
+  geom_histogram(bins = 30, fill = "skyblue", color = "black") +
+  theme_minimal() +
+  labs(title = "Distribution of P-Values from Bootstrap", x = "P-Value", y = "Frequency")
 
-3.) Plot variances of each component with time
+print(sig_values)
+```
+When the treatment effect is the same as the standard deviation (4)

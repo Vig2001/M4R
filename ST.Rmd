@@ -32,7 +32,7 @@ m = function(x){
 # point 2, let's do 10 individual trajectories
 generateValues <- function() {
   m_values <- m(1:16)
-  rnorm_values <- rnorm(16, mean = 0, sd = 2) # Adjust the standard deviation (sd) here
+  rnorm_values <- rnorm(16, mean = 0, sd = 4) # Adjust the standard deviation (sd) here
   return(m_values + rnorm_values)
 }
 
