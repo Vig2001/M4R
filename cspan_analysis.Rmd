@@ -106,28 +106,64 @@ rs_1005$VISITNUM <- mapping[as.character(rs_1005$VISITNUM)]
 
 Now for some EDA
 ```{r}
-rs_plot <- rs_1005 %>%
+rs_1005_distinct <- rs_1005 %>%
+  filter(RSTEST == "NSAA1-Total") %>%
+  distinct(USUBJID, VISITNUM, RSORRES, .keep_all = TRUE)
+
+rs_plot <- rs_1005_distinct %>%
   filter(RSTEST == "NSAA1-Total") %>%
   group_by(USUBJID) %>%
   mutate(last_visit = VISITNUM == max(VISITNUM)) %>%
   ungroup()
 
-# Plotting
-ggplot(data = rs_plot, aes(x = VISITNUM, y = as.numeric(RSORRES), group = USUBJID)) +
-  geom_line(color = "gray", size = 1) +  # Draw lines for trajectories
-  geom_point(aes(color = ifelse(last_visit, "dropout", "active")), size = 2, shape = 21, fill = ifelse(rs_plot$last_visit, "red", "blue")) +  # Points colored based on condition
+dropoutplot <- ggplot(data = rs_plot, aes(x = VISITNUM, y = as.numeric(RSORRES), group = USUBJID)) +
+  geom_line(color = "gray", size = 1) +
+  geom_point(aes(color = ifelse(last_visit, "dropout", "active")), size = 2, shape = 21, fill = ifelse(rs_plot$last_visit, "red", "blue")) +
   scale_color_manual(values = c("active" = "blue", "dropout" = "red"),
-                     labels = c("active" = "Active", "dropout" = "Dropout")) +  # Customizing colors and labels
+                     labels = c("active" = "Active", "dropout" = "Dropout")) +
+  scale_x_continuous(breaks = c(0, 3, 6, 9)) +
   labs(title = "Patient Trajectories with Dropout",
        x = "Visit Number",
        y = "NSAA Total Score",
        color = "Patient Status") +
   theme_minimal() +
   theme(legend.position = "bottom")
+
+print(dropoutplot)
+ggsave("plots/dropoutplot.png", dropoutplot, dpi=300)
+```
+
+Create table of means and s.d. for each visit
+```{r}
+rs_1005_distinct$RSORRES <- as.numeric(rs_1005_distinct$RSORRES)
+
+# Summarize data: calculate mean, sd, and count for each VISITNUM
+summary_stats <- rs_1005_distinct %>%
+  filter(RSTEST == "NSAA1-Total") %>%
+  group_by(VISITNUM) %>%
+  summarise(
+    mean = mean(RSORRES, na.rm = TRUE),
+    sd = sd(RSORRES, na.rm = TRUE),
+    n = n(),  # Counting the number of observations at each visit
+    .groups = 'drop'  # Drop grouping after summarization
+  ) %>%
+  mutate(label = sprintf("%.2f (%.2f), n = %d", mean, sd, n))  # Format mean, sd, and n into a single string
+
+print(summary_stats)
+```
+Copy into latex
+```{r}
+latex_table <- xtable(summary_stats[, c('VISITNUM', 'label')],
+                      caption = 'Mean, Standard Deviation, and Sample Size of NSAA Total Score by Visit Number',
+                      label = 'tab:nsaa_stats',
+                      align = c('l', 'l', 'l'),  # Alignment of columns: left, left
+                      include.rownames = FALSE)
+
+# Print the LaTeX table code
+print(latex_table, type = 'latex', comment = FALSE, sanitize.text.function = function(x) {x})
 ```
 
 Now we get the matrix that we input into PCA from this
-
 ```{r,cache=TRUE}
 # first we have to investigate all the factors that make up RSTEST column
 
