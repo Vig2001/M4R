@@ -782,4 +782,4 @@ ggplot(data.frame(PValue = bootstrap_p_values), aes(x = PValue)) +
 
 print(sig_values)
 ```
-When the treatment effect is the same as the standard deviation (4)
+Ask chris about the statistical power stuff.

@@ -35,8 +35,8 @@ NSAA <- lapply(1:10, function(i) generateValues())
 
 # create an AR(1) error correlation
 # Set the parameters for the AR(1) error correlation
-phi_error <- 0.9  # Autoregressive coefficient for the error
-sigma_error <- 2.5 # Standard deviation of the error
+phi_error <- 0  # Autoregressive coefficient for the error
+sigma_error <- 2.5# Standard deviation of the error
 errors_list <- vector("list", length = 10)
 
 for (i in 1:10) {
@@ -58,20 +58,20 @@ all_errors <- unlist(errors_list)
 pacf_errors <- pacf(all_errors, lag.max = 15, plot = FALSE)
 
 # Plot the individual trajectories with AR(1) error correlation
-png(filename = "plots/simulated_trajectories.png", width = 1000, height = 800, res = 150)
+#png(filename = "plots/simulated_trajectories.png", width = 1000, height = 800, res = 150)
 plot(1:16, NSAA[[1]], type = 'l', ylim = c(min(unlist(NSAA)), 34), xlab = 'Age', ylab = 'NSAA Total', main = 'Simulated Trajectories of 10 Patients')
 for (i in 2:10) {
   lines(1:16, NSAA[[i]], type = 'l', col = i)
 }
 lines(1:16, m(1:16), col = "black", lwd = 2, lty = "dashed")
 legend("topright", legend = c("Mean Trajectory"), col = "black", lwd = 2, lty = "dashed", title = NULL)
-dev.off()
+#dev.off()
 
 # Plot PACF for the AR(1) errors
-png(filename = "plots/pacf_errors.png", width = 1000, height = 800, res = 150)
+#png(filename = "plots/pacf_errors.png", width = 1000, height = 800, res = 150)
 plot(pacf_errors, xlab = "Lag", ylab = "PACF", main = "Partial Autocorrelation of Errors")
 abline(h = 0, col = "red")
-dev.off()
+#dev.off()
 # autocorrelation gives us some indication on how easily we can distinguish between whether the individual has been given treatment or not
 ```
 
