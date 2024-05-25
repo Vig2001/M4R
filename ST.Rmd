@@ -11,13 +11,7 @@ $Y_{ij} = a + b t_j + c t_j^2 + \epsilon_{ij}$
 
 For this first task, we assume one cluster / class, here $i,j$ represent the individual and time point respectively. This is just for simplicity, and we can extend this later on. What I have done to begin with is:
 
-1. Create the mean trajectory of NSAA scores, by inspecting the graph given in the Natural History Paper
-
-2. Add in a random error so that we get rough individual trajectories.
-
-3. Accounted for correlation between errors at different time points for the same subject by using an AR(1) process.
-
-4. add treatment effect
+Create the mean trajectory using Muntoni et al.
 
 ```{r}
 # point 1 -  we start from age 1 and end at age 16
@@ -41,7 +35,7 @@ NSAA <- lapply(1:10, function(i) generateValues())
 
 # create an AR(1) error correlation
 # Set the parameters for the AR(1) error correlation
-phi_error <- 0.5  # Autoregressive coefficient for the error
+phi_error <- 0.9  # Autoregressive coefficient for the error
 sigma_error <- 2.5 # Standard deviation of the error
 errors_list <- vector("list", length = 10)
 
@@ -50,7 +44,7 @@ for (i in 1:10) {
   NSAA_i = vector(length = 16)
   error_t_minus_1 <- rnorm(1, mean = 0, sd = sigma_error)  # Initialize the error term
   for (j in 1:16) {
-    val = max(m(j) + error_t_minus_1, 0)
+    val = min(max(m(j) + error_t_minus_1, 0), 34) 
     errors[j] = val - m(j)
     NSAA_i[j] = val
     error_t <- phi_error * error_t_minus_1 + rnorm(1, mean = 0, sd = sigma_error)  # Update the error term
@@ -64,15 +58,20 @@ all_errors <- unlist(errors_list)
 pacf_errors <- pacf(all_errors, lag.max = 15, plot = FALSE)
 
 # Plot the individual trajectories with AR(1) error correlation
-plot(1:16, NSAA[[1]], type = 'l', xlab = 'Age', ylab = 'NSAA', main = 'Trajectories')
-
-# Loop through the remaining trajectories and add them to the existing plot
+png(filename = "plots/simulated_trajectories.png", width = 1000, height = 800, res = 150)
+plot(1:16, NSAA[[1]], type = 'l', ylim = c(min(unlist(NSAA)), 34), xlab = 'Age', ylab = 'NSAA Total', main = 'Simulated Trajectories of 10 Patients')
 for (i in 2:10) {
-  lines(1:16, NSAA[[i]], type = 'l', col = i)  # Use different colors for each trajectory
+  lines(1:16, NSAA[[i]], type = 'l', col = i)
 }
+lines(1:16, m(1:16), col = "black", lwd = 2, lty = "dashed")
+legend("topright", legend = c("Mean Trajectory"), col = "black", lwd = 2, lty = "dashed", title = NULL)
+dev.off()
 
+# Plot PACF for the AR(1) errors
+png(filename = "plots/pacf_errors.png", width = 1000, height = 800, res = 150)
 plot(pacf_errors, xlab = "Lag", ylab = "PACF", main = "Partial Autocorrelation of Errors")
 abline(h = 0, col = "red")
+dev.off()
 # autocorrelation gives us some indication on how easily we can distinguish between whether the individual has been given treatment or not
 ```
 
