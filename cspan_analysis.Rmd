@@ -30,21 +30,7 @@ library(ggrepel)
 rs <- read_csv("rs.csv")
 ```
 
-Chris' snippet of code
-
-```{r}
-#rs_clean <- rs %>% filter(STUDYID == "DMD-1005",
-                          #RSTEST == "NSAA1-Total",
-                          #VISITNUM <= 15) 
-#rs_clean$nsaa <- as.numeric(rs_clean$RSORRES)
-
-#ggplot(data = rs_clean,
-       #mapping  = aes(x = VISITNUM ,
-                      #y = nsaa,
-                      #group = USUBJID)) + geom_line()
-```
-
-Now we perform some data analysis. Firstly, we only obtain data which belong to the study DMD-1005. We then filter so that we only get values of each NSAA component at baseline for each patient. The VISITNUM are in a nonsensical order because some patients are assigned a visit number of 99. This has to be investigated - hypothesis is that the patients which were assigned a VISITNUM of 99 did not make it past screening.
+We perform some data analysis. Firstly, we only obtain data which belong to the study DMD-1005. We then filter so that we only get values of each NSAA component at baseline for each patient. The VISITNUM are in a nonsensical order because some patients are assigned a visit number of 99. This has to be investigated - hypothesis is that the patients which were assigned a VISITNUM of 99 did not make it past screening.
 
 ```{r, cache=TRUE}
 # get only the relevant study
@@ -116,6 +102,28 @@ for(patient_id in dropout_patients) {
 mapping <- setNames(c(0, 1, 2, 3, 4, 5, 6, 7, 8, 9), c(0, 1, 4, 5, 6, 7, 8, 9, 10, 11))
 
 rs_1005$VISITNUM <- mapping[as.character(rs_1005$VISITNUM)]
+```
+
+Now for some EDA
+```{r}
+rs_plot <- rs_1005 %>%
+  filter(RSTEST == "NSAA1-Total") %>%
+  group_by(USUBJID) %>%
+  mutate(last_visit = VISITNUM == max(VISITNUM)) %>%
+  ungroup()
+
+# Plotting
+ggplot(data = rs_plot, aes(x = VISITNUM, y = as.numeric(RSORRES), group = USUBJID)) +
+  geom_line(color = "gray", size = 1) +  # Draw lines for trajectories
+  geom_point(aes(color = ifelse(last_visit, "dropout", "active")), size = 2, shape = 21, fill = ifelse(rs_plot$last_visit, "red", "blue")) +  # Points colored based on condition
+  scale_color_manual(values = c("active" = "blue", "dropout" = "red"),
+                     labels = c("active" = "Active", "dropout" = "Dropout")) +  # Customizing colors and labels
+  labs(title = "Patient Trajectories with Dropout",
+       x = "Visit Number",
+       y = "NSAA Total Score",
+       color = "Patient Status") +
+  theme_minimal() +
+  theme(legend.position = "bottom")
 ```
 
 Now we get the matrix that we input into PCA from this
@@ -344,7 +352,7 @@ ggsave("plots/biplot_raw.png", my_biplot, width = 10, height = 8, dpi = 300)
 # loadings matrix
 loadings_matrix_facto <- pca_facto$var$coord
 
-print(my_biplot) # loadings are a factor of e off prcomp - ask chris about this
+print(loadings_matrix_facto[, 1:2]) # loadings are a factor of e off prcomp - ask chris about this
 ```
 
 ```{r, warning=FALSE}
