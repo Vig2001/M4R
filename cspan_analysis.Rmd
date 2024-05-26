@@ -162,7 +162,7 @@ Visualise the different stages of disease.
 
 specific_patients <- rs_plot %>% filter(USUBJID %in% c("DMD-1005/018-87850", "DMD-1005/018-87881"))
 
-ggplot(data = specific_patients, aes(x = VISITNUM, y = as.numeric(RSORRES), group = USUBJID)) +
+diff_stagesplot <- ggplot(data = specific_patients, aes(x = VISITNUM, y = as.numeric(RSORRES), group = USUBJID)) +
   geom_line(color = "gray", size = 1) +
   geom_point(aes(color = ifelse(last_visit, "dropout", "active")), size = 2, shape = 21, fill = ifelse(specific_patients$last_visit, "red", "blue")) +
   scale_color_manual(values = c("active" = "blue", "dropout" = "red"),
@@ -175,8 +175,7 @@ ggplot(data = specific_patients, aes(x = VISITNUM, y = as.numeric(RSORRES), grou
   theme_minimal() +
   theme(legend.position = "bottom")
 
-
-
+ggsave("plots/diffstagesplot.png", diff_stagesplot, height=5)
 ```
 
 Now we get the matrix that we input into PCA from this
