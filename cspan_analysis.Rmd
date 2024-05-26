@@ -133,6 +133,7 @@ print(dropoutplot)
 ggsave("plots/dropoutplot.png", dropoutplot, dpi=300)
 ```
 
+
 Create table of means and s.d. for each visit
 ```{r}
 rs_1005_distinct$RSORRES <- as.numeric(rs_1005_distinct$RSORRES)
@@ -151,16 +152,31 @@ summary_stats <- rs_1005_distinct %>%
 
 print(summary_stats)
 ```
-Copy into latex
-```{r}
-latex_table <- xtable(summary_stats[, c('VISITNUM', 'label')],
-                      caption = 'Mean, Standard Deviation, and Sample Size of NSAA Total Score by Visit Number',
-                      label = 'tab:nsaa_stats',
-                      align = c('l', 'l', 'l'),  # Alignment of columns: left, left
-                      include.rownames = FALSE)
 
-# Print the LaTeX table code
-print(latex_table, type = 'latex', comment = FALSE, sanitize.text.function = function(x) {x})
+Visualise the different stages of disease.
+```{r, warning=FALSE}
+# choose three patients who are at different stages
+# DMD-1005/508-80853 - decreasing
+# DMD-1005/018-87850 - increasing
+# DMD-1005/018-87881 - constant
+
+specific_patients <- rs_plot %>% filter(USUBJID %in% c("DMD-1005/018-87850", "DMD-1005/018-87881"))
+
+ggplot(data = specific_patients, aes(x = VISITNUM, y = as.numeric(RSORRES), group = USUBJID)) +
+  geom_line(color = "gray", size = 1) +
+  geom_point(aes(color = ifelse(last_visit, "dropout", "active")), size = 2, shape = 21, fill = ifelse(specific_patients$last_visit, "red", "blue")) +
+  scale_color_manual(values = c("active" = "blue", "dropout" = "red"),
+                     labels = c("active" = "Active", "dropout" = "Dropout")) +
+  scale_x_continuous(breaks = c(0, 3, 6, 9)) +
+  labs(title = "Specific Patient Trajectories",
+       x = "Visit Number",
+       y = "NSAA Total Score",
+       color = "Patient Status") +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+
+
+
 ```
 
 Now we get the matrix that we input into PCA from this
