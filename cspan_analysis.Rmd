@@ -687,21 +687,25 @@ print(sig_values)
 Here we print out the proportion of significant p-values (i.e. p-values under 0.05). This is an unbiased estimator for the statistical power of the hypothesis test we are conducting (the hypothesis test is essentially is there enough evidence to say that the mean trajectory of an untreated and treated patient is the same), which is a test to investigate whether the treatment effect has an observable impact on the mean NSAA trajectories. When the proportion of significant p-values is close to 1 this illustrates we have a strong statistical test, which translates to the probability that the test correctly rejects the null hypothesis (in this scenario this is the hypothesis that the treatment effect has no observable impact). Therefore, if we have a proportion for \verb|sig_values| close to 1 then if there is indeed a treatment effect the test is high likely to detect it. Conversely, if it is closer to 0 then the test is unlikely to detect the treatment effect. We can see that a treatment effect of 5 gives us our desired result (a proportion > 0.8) for a sample size of 131 patients. Now we must simulate how the sample size affects the power.
 
 ```{r}
-rho <- mean_phi # choose from previous work
-sigma <- 4 # modify std
+rho <- mean_phi # 0.96
+sigma <- 5 # modify std
 
 # Parameters
-N <- 130 # Number of patients
+N <- 100 # Number of patients
 visits <- 1:10 # Visits from 1 to 10
-treatment_effect <- 4
+treatment_effect <- 5
 
 # Using rough numbers
-intercept <- 16
+intercept <- 10
 visit_coef <- 2.5
-visit_squared_coef <- -0.43
+visit_squared_coef <- -0.5
 
-# Ensure half of the patients are treated
-treatment_assignments <- sample(c(rep(1, N/2), rep(0, N/2)))
+# Ensure half of the patients are treated (random)
+#treatment_assignments <- sample(c(rep(1, N/2), rep(0, N/2)))
+
+
+# Ensure first half of patients are treated - for t test purposes
+treatment_assignments <- ifelse(1:N <= N/2, 1, 0)
 
 # Simulate AR(1) residuals for one patient (10 visits)
 simulate_ar1_residuals <- function(n, rho, sigma) {
@@ -797,4 +801,19 @@ ggplot(data.frame(PValue = bootstrap_p_values), aes(x = PValue)) +
 
 print(sig_values)
 ```
-Ask chris about the statistical power stuff.
+Ask chris about the statistical power stuff - why do I need to perform t-test on residuals. What does t-test on residuals actually show? Surely I perform a t-test on the actual simulated scores at a chosen time-point - probably best to choose baseline and also last visit. We probably won't be able to distinguish between patients at baseline but potentially at the last visit.
+
+```{r, warning=False}
+# Assuming you've installed and loaded simr and lme4
+library(lme4)
+library(simr)
+
+# Fit a model (example using lmer for a similar structure)
+model <- lmer(RSORRES ~ VISIT + I(VISIT^2) + TREAT + (1 | USUBJID), data = simulated_data)
+
+# Estimate power to detect a significant effect of treatment
+results <- powerSim(model, fixed("TREAT"), nsim = 50)  # nsim is the number of simulations
+
+# Check results
+print(results)
+```
