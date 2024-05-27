@@ -642,13 +642,18 @@ print(paste("Mean Coefficient for VISIT Squared:", mean_visit_squared))
 
 ```{r}
 # plot the residuals as a whole
+png("plots/res_vs_fitted_whole.png", width=3000, height=2000, res=300)
 plot(nsaa_total_gls, resid(., type="p")~fitted(.), abline=0)
+dev.off()
 # plot the residuals for every visit
 # check if there is clustering within the residuals
-# we assume no grouping when using this model - maybe if there is clustering in the residuals we might need to use a mixed model.
+# we assume no grouping when using this model - maybe if there is clustering in the residuals we might need to use a different model
+png("plots/residualsbyvisit.png", width=6000, height=5000, res=300)
 plot(nsaa_total_gls, resid(., type="p")~fitted(.)|VISIT, abline=0)
 # qqnorm to see if standardized residuals are standard normal
+png("plots/qqnorm_gls_res.png", width=3000, height=2000, res=300)
 qqnorm(nsaa_total_gls, abline=c(0,1))
+dev.off()
 
 # check autocorrelation within residuals for a random subject
 residuals_data <- data.frame(residuals = residuals(nsaa_total_gls),
@@ -661,15 +666,17 @@ subject_residuals <- subset(residuals_data,
 # We cannot derive a correlation structure based off the PACF
 # The PACF for each individual changes
 # Moroever the correlation values themselves at certain lag points aren't significant enough to draw a conclusion from
+png("plots/subject_residuals.png", width=3000, height=2000, res=300)
 pacf(subject_residuals, main=paste("PACF for Subject", random_subject))
-
+dev.off()
 # fit the model without ar1 correlation - then plot the residuals and check its autocorrelation.
 nsaa_uncorrelated_gls <- gls(RSORRES ~ 1 + VISIT + I(VISIT^2),
                              data = rs_1005_nsaa)
 residuals_nsaa <- residuals(nsaa_uncorrelated_gls)
 # Can clearly observe a lag 1 correlation structure which is encapsulated by the AR1 in our original model.
-plot(residuals_nsaa)
+png("plots/uncorrelated_residuals.png", width=3000, height=2000, res=300)
 pacf(residuals_nsaa, lag.max=10, main="PACF of Uncorrelated Residuals")
+dev.off()
 ```
 
 The summary indicates an AR(1) correlation structure in our GLS model, with a high phi estimate of 0.9639783, suggesting strong correlation between the nsaa scores of a single patient between two visits (i.e. 12 weeks apart). This is as expected because someone who scores highest at visit 1 (arbitrary) is likely to score highest at visit 2, regardless of the stage of disease. Correlation is independent of the trend.
