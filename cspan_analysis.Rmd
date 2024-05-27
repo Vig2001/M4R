@@ -520,7 +520,7 @@ rs_1005_nsaa <- rs_1005_nsaa %>% distinct(USUBJID, VISIT,
 rs_1005_nsaa$RSORRES <- as.numeric(rs_1005_nsaa$RSORRES)
 
 # output summary
-nsaa_total_gls <- gls(RSORRES ~ poly(VISIT, 2), 
+nsaa_total_gls <- gls(RSORRES ~ 1 + VISIT + I(VISIT^2), 
                         data = rs_1005_nsaa, 
                         correlation = corAR1(form = ~ 1 | USUBJID))
 
@@ -556,13 +556,89 @@ for (reps in 1:1000){
 }
 
 # 1000 bootstrap samples
-#bootstrap_results <- boot(data = rs_1005_nsaa, statistic = gls_phi, R = 1000)
 # histogram of results
-hist(boot_phis, breaks = 30, main = "Histogram of Phi Parameters",
-     xlab = "Phi Parameter")
+phi_data <- data.frame(Phi = boot_phis)
+phi_histogram <- ggplot(phi_data, aes(x = Phi)) + 
+  geom_histogram(bins = 30, fill = "lightblue", color = "black") +
+  ggtitle("Histogram of Phi Parameters") +
+  xlab("Phi Parameter") +
+  ylab("Frequency") +
+  theme_minimal()
+
+ggsave("plots/phihistogram.png", phi_histogram)
 mean_phi <- mean(boot_phis)
 print(mean_phi)
 ```
+
+```{r}
+gls_coeffs <- function(patient_ids) {
+  # Filter data for the current bootstrap sample
+  boot_data <- rs_1005_nsaa %>% filter(USUBJID %in% unique(patient_ids))
+  
+  # Fit the GLS model
+  gls_model <- gls(RSORRES ~ 1 + VISIT + I(VISIT^2), 
+                   data = boot_data, 
+                   correlation = corAR1(form = ~ 1 | USUBJID))
+  
+  # Extract and return coefficients, including the intercept
+  coeffs <- coef(gls_model)
+  return(coeffs)
+}
+
+boot_coeffs <- data.frame(Intercept = double(1000), VISIT = double(1000), VISIT_squared = double(1000))
+
+for (reps in 1:1000) {
+  # Sample with replacement from patient_ids
+  boot_indices <- sample(patient_ids, size = length(patient_ids), replace = TRUE)
+  
+  # Get coefficients for the bootstrap sample
+  coeffs <- gls_coeffs(boot_indices)
+  
+  # Store coefficients
+  boot_coeffs$Intercept[reps] <- coeffs['(Intercept)']
+  boot_coeffs$VISIT[reps] <- coeffs['VISIT']
+  boot_coeffs$VISIT_squared[reps] <- coeffs['I(VISIT^2)']
+}
+
+p0 <- ggplot(boot_coeffs, aes(x = Intercept)) + 
+  geom_histogram(bins = 30, fill = "red", color = "black") +
+  ggtitle("Histogram of Intercept Estimates") +
+  xlab("Intercept") +
+  ylab("Frequency") +
+  theme_minimal()
+p1 <- ggplot(boot_coeffs, aes(x = VISIT)) + 
+  geom_histogram(bins = 30, fill = "blue", color = "black") +
+  ggtitle("Histogram of Linear Coefficient Estimates") +
+  xlab("Coefficient of VISIT") +
+  ylab("Frequency") +
+  theme_minimal()
+p2 <- ggplot(boot_coeffs, aes(x = VISIT_squared)) + 
+  geom_histogram(bins = 30, fill = "green", color = "black") +
+  ggtitle("Histogram of Quadratic Coefficient Estimates") +
+  xlab("Coefficient of VISIT Squared") +
+  ylab("Frequency") +
+  theme_minimal()
+
+# Save the plot if needed
+ggsave("plots/intercept_histogram.png", p0)
+ggsave("plots/visit_coeff_histogram.png", p1)
+ggsave("plots/visit_squared_coeff_histogram.png", p2)
+
+
+print(p0)
+print(p1)
+print(p2)
+
+# Statistical summary for the intercept
+mean_intercept <- mean(boot_coeffs$Intercept)
+mean_visit <- mean(boot_coeffs$VISIT)
+mean_visit_squared <- mean(boot_coeffs$VISIT_squared)
+print(paste("Mean Intercept:", mean_intercept))
+print(paste("Mean Coefficient for VISIT:", mean_visit))
+print(paste("Mean Coefficient for VISIT Squared:", mean_visit_squared))
+```
+
+
 
 ```{r}
 # plot the residuals as a whole
@@ -592,6 +668,7 @@ nsaa_uncorrelated_gls <- gls(RSORRES ~ 1 + VISIT + I(VISIT^2),
                              data = rs_1005_nsaa)
 residuals_nsaa <- residuals(nsaa_uncorrelated_gls)
 # Can clearly observe a lag 1 correlation structure which is encapsulated by the AR1 in our original model.
+plot(residuals_nsaa)
 pacf(residuals_nsaa, lag.max=10, main="PACF of Uncorrelated Residuals")
 ```
 
