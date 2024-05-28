@@ -648,10 +648,12 @@ dev.off()
 # plot the residuals for every visit
 # check if there is clustering within the residuals
 # we assume no grouping when using this model - maybe if there is clustering in the residuals we might need to use a different model
-png("plots/residualsbyvisit.png", width=6000, height=5000, res=300)
+png("plots/residualsbyvisit.png", width=3000, height=4000, res=300)
+par(cex=1.5)
 plot(nsaa_total_gls, resid(., type="p")~fitted(.)|VISIT, abline=0)
+dev.off()
 # qqnorm to see if standardized residuals are standard normal
-png("plots/qqnorm_gls_res.png", width=3000, height=2000, res=300)
+png("plots/qqnorm_gls_res.png", width=3000, height=1000, res=300)
 qqnorm(nsaa_total_gls, abline=c(0,1))
 dev.off()
 
