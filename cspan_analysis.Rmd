@@ -903,3 +903,94 @@ results <- powerSim(model, fixed("TREAT"), nsim = 50)  # nsim is the number of s
 # Check results
 print(results)
 ```
+
+
+```{r}
+# Using rough numbers
+generate_data <- function(N, treatment_effect){
+
+visits <- 1:10
+intercept <- 10
+visit_coef <- 2.5
+visit_squared_coef <- -0.5
+
+# Ensure half of the patients are treated (random)
+#treatment_assignments <- sample(c(rep(1, N/2), rep(0, N/2)))
+
+
+# Ensure first half of patients are treated - for t test purposes
+treatment_assignments <- ifelse(1:N <= N/2, 1, 0)
+
+# Simulate AR(1) residuals for one patient (10 visits)
+simulate_ar1_residuals <- function(n, rho, sigma) {
+  e <- rnorm(n, mean = 0, sd = sigma)
+  residuals <- vector(length = n)
+  residuals[1] <- e[1]
+  
+  for (i in 2:n) {
+    residuals[i] <- rho * residuals[i - 1] + e[i]
+  }
+  
+  return(residuals)
+}
+
+# Function to generate data for one patient
+simulate_patient_data <- function(patient_id, treat, visits, rho, sigma) {
+  n <- length(visits)
+  ar1_residuals <- simulate_ar1_residuals(n, rho, sigma)
+  
+  rsorres <- intercept + 
+             visit_coef * visits + 
+             visit_squared_coef * visits^2 + 
+             treat * treatment_effect +
+             ar1_residuals
+  
+  # Ensure correct range and integer type
+  rsorres <- round(pmin(pmax(rsorres, 0), 34))
+  
+  data.frame(
+    USUBJID = rep(patient_id, n),
+    VISIT = visits,
+    TREAT = rep(treat, n),
+    RSORRES = rsorres
+  )
+}
+
+# Simulate data for N patients and 10 visits
+patient_data <- lapply(1:N, function(i) {
+  treat <- sample(c(0,1), 1)
+  simulate_patient_data(i, treat, visits, rho, sigma)
+})
+simulated_data <- bind_rows(patient_data)
+return(simulated_data)
+}
+
+power_calc <- function(N, treatment_effect){
+data <- generate_data(N, treatment_effect)
+set.seed(123)
+bootstrap_p_values <- bootstrap_analysis(data, num_bootstraps = 500)
+sig_values <- sum(bootstrap_p_values < 0.05) / length(bootstrap_p_values)
+return(sig_values)
+}
+
+treatment_effects <- seq(0, 5, length.out = 20)
+sample_sizes <- c(50, 100, 150)
+results <- data.frame()
+
+# Loop over sample sizes and treatment effects
+for (size in sample_sizes) {
+  for (effect in treatment_effects) {
+    power <- power_calc(size, effect)
+    results <- rbind(results, data.frame(SampleSize = size, EffectSize = effect, Power = power))
+  }
+}
+
+# Plotting
+ggplot(results, aes(x = EffectSize, y = Power, color = as.factor(SampleSize))) +
+  geom_line() +
+  labs(title = "Power Curve for Different Sample Sizes",
+       x = "Treatment Effect Size",
+       y = "Power",
+       color = "Sample Size") +
+  theme_minimal()
+```
