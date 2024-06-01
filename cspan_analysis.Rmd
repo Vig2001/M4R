@@ -762,13 +762,13 @@ bootstrap_p_values <- treatment_effect_fn(rs_1005_nsaa, num_bootstraps = 1000)
 sig_values <- sum(bootstrap_p_values < 0.05) / length(bootstrap_p_values)
 
 # Plot the p-values
-ggplot(data.frame(PValue = bootstrap_p_values), aes(x = PValue)) +
+boot_teff <- ggplot(data.frame(PValue = bootstrap_p_values), aes(x = PValue)) +
   geom_histogram(bins = 30, fill = "skyblue", color = "black") +
   theme_minimal() +
-  labs(title = "Distribution of P-Values from Bootstrap", x = "P-Value", y = "Frequency")
+  labs(title = "Distribution of Treatment Effect p-values from Bootstrap", x = "p-value", y = "Frequency")
 
 print(sig_values)
-
+ggsave("plots/boot_teff.png", boot_teff)
 ```
 Here we print out the proportion of significant p-values (i.e. p-values under 0.05). This is an unbiased estimator for the statistical power of the hypothesis test we are conducting (the hypothesis test is essentially is there enough evidence to say that the mean trajectory of an untreated and treated patient is the same), which is a test to investigate whether the treatment effect has an observable impact on the mean NSAA trajectories. When the proportion of significant p-values is close to 1 this illustrates we have a strong statistical test, which translates to the probability that the test correctly rejects the null hypothesis (in this scenario this is the hypothesis that the treatment effect has no observable impact). Therefore, if we have a proportion for \verb|sig_values| close to 1 then if there is indeed a treatment effect the test is high likely to detect it. Conversely, if it is closer to 0 then the test is unlikely to detect the treatment effect. We can see that a treatment effect of 5 gives us our desired result (a proportion > 0.8) for a sample size of 131 patients. Now we must simulate how the sample size affects the power.
 
@@ -880,12 +880,13 @@ bootstrap_p_values <- bootstrap_analysis(simulated_data, num_bootstraps = 1000)
 sig_values <- sum(bootstrap_p_values < 0.05) / length(bootstrap_p_values)
 
 # Plot the distribution of p-values
-ggplot(data.frame(PValue = bootstrap_p_values), aes(x = PValue)) +
+boot_sim_ps <- ggplot(data.frame(PValue = bootstrap_p_values), aes(x = PValue)) +
   geom_histogram(bins = 30, fill = "skyblue", color = "black") +
   theme_minimal() +
-  labs(title = "Distribution of P-Values from Bootstrap", x = "P-Value", y = "Frequency")
+  labs(title = "Distribution of Treatment Effect p-values from Bootstrap", x = "p-value", y = "Frequency")
 
 print(sig_values)
+ggsave("")
 ```
 Ask chris about the statistical power stuff - why do I need to perform t-test on residuals. What does t-test on residuals actually show? Surely I perform a t-test on the actual simulated scores at a chosen time-point - probably best to choose baseline and also last visit. We probably won't be able to distinguish between patients at baseline but potentially at the last visit.
 
@@ -966,18 +967,19 @@ return(simulated_data)
 }
 
 power_calc <- function(N, treatment_effect){
+  set.seed(123)
 data <- generate_data(N, treatment_effect)
-set.seed(123)
 bootstrap_p_values <- bootstrap_analysis(data, num_bootstraps = 500)
 sig_values <- sum(bootstrap_p_values < 0.05) / length(bootstrap_p_values)
 return(sig_values)
 }
 
-treatment_effects <- seq(0, 5, length.out = 20)
-sample_sizes <- c(50, 100, 150)
+treatment_effects <- seq(0, 5, length.out = 5)
+sample_sizes <- c(50, 100, 150, 200)
 results <- data.frame()
 
 # Loop over sample sizes and treatment effects
+set.seed(123)
 for (size in sample_sizes) {
   for (effect in treatment_effects) {
     power <- power_calc(size, effect)
@@ -986,11 +988,15 @@ for (size in sample_sizes) {
 }
 
 # Plotting
-ggplot(results, aes(x = EffectSize, y = Power, color = as.factor(SampleSize))) +
+power_plots <- ggplot(results, aes(x = EffectSize, y = Power, color = as.factor(SampleSize))) +
   geom_line() +
+  geom_hline(yintercept = 0.8, linetype = "dashed", color = "red")  +
   labs(title = "Power Curve for Different Sample Sizes",
        x = "Treatment Effect Size",
        y = "Power",
        color = "Sample Size") +
   theme_minimal()
+
+print(power_plots)
+ggsave("plots/power_curves.png", power_plots, width=10, height=8, dpi=300)
 ```
