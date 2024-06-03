@@ -558,14 +558,27 @@ for (reps in 1:1000){
 # 1000 bootstrap samples
 # histogram of results
 phi_data <- data.frame(Phi = boot_phis)
+# Calculate the mean and standard deviation of the phi values in the data
+phi_bar <- mean(phi_data$Phi)
+sd_phi <- sd(phi_data$Phi)
+
+# Plot histogram with Gaussian density overlay using the mean of phi_data
 phi_histogram <- ggplot(phi_data, aes(x = Phi)) + 
-  geom_histogram(bins = 30, fill = "lightblue", color = "black") +
+  geom_histogram(aes(y = ..density..), bins = 30, fill = "lightblue", color = "black") +
+  stat_function(fun = dnorm, args = list(mean = phi_bar, sd = sd_phi),
+                aes(color = "Gaussian Density"), size = 1) + # Assign a color aesthetic to create a legend
+  scale_color_manual(name = "Gaussian Parameters", 
+                     values = "black", 
+                     labels = paste("Mean =", round(phi_bar, 4), "SD =", round(sd_phi, 4))) +
   ggtitle("Histogram of Phi Parameters") +
   xlab("Phi Parameter") +
-  ylab("Frequency") +
-  theme_minimal()
+  ylab("Density") +
+  theme_minimal() +
+  theme(legend.position = "top")
 
-ggsave("plots/phihistogram.png", phi_histogram)
+print(phi_histogram)
+
+ggsave("plots/phihistogram.png", phi_histogram, height=10, width=8)
 mean_phi <- mean(boot_phis)
 print(mean_phi)
 ```
@@ -600,29 +613,62 @@ for (reps in 1:1000) {
   boot_coeffs$VISIT_squared[reps] <- coeffs['I(VISIT^2)']
 }
 
+# Calculate mean and sd for each coefficient
+mean_intercept <- mean(boot_coeffs$Intercept)
+sd_intercept <- sd(boot_coeffs$Intercept)
+mean_visit <- mean(boot_coeffs$VISIT)
+sd_visit <- sd(boot_coeffs$VISIT)
+mean_visit_squared <- mean(boot_coeffs$VISIT_squared)
+sd_visit_squared <- sd(boot_coeffs$VISIT_squared)
+
+
 p0 <- ggplot(boot_coeffs, aes(x = Intercept)) + 
-  geom_histogram(bins = 30, fill = "red", color = "black") +
+  geom_histogram(aes(y = after_stat(density)), bins = 30, fill = "red", color = "black") +
+  stat_function(fun = dnorm, args = list(mean = mean_intercept, sd = sd_intercept), 
+                aes(color = "Gaussian Density"), size = 1) +
+  scale_color_manual(name = "Gaussian Parameters", 
+                     values = "black", 
+                     labels = sprintf("Mean = %.4f, SD = %.4f", mean_intercept, sd_intercept)) +
   ggtitle("Histogram of Intercept Estimates") +
   xlab("Intercept") +
-  ylab("Frequency") +
-  theme_minimal()
+  ylab("Density") +
+  theme_minimal() +
+  scale_y_continuous(labels = function(x) x * 100) +
+  theme(legend.position = "top")
+
 p1 <- ggplot(boot_coeffs, aes(x = VISIT)) + 
-  geom_histogram(bins = 30, fill = "blue", color = "black") +
+  geom_histogram(aes(y = after_stat(density)), bins = 30, fill = "blue", color = "black") +
+  stat_function(fun = dnorm, args = list(mean = mean_visit, sd = sd_visit), 
+                aes(color = "Gaussian Density"), size = 1) +
+  scale_color_manual(name = "Gaussian Parameters", 
+                     values = "black", 
+                     labels = sprintf("Mean = %.4f, SD = %.4f", mean_visit, sd_visit)) +
   ggtitle("Histogram of Linear Coefficient Estimates") +
   xlab("Coefficient of VISIT") +
-  ylab("Frequency") +
-  theme_minimal()
+  ylab("Density") +
+  theme_minimal() +
+  theme(legend.position = "top")
+
+
 p2 <- ggplot(boot_coeffs, aes(x = VISIT_squared)) + 
-  geom_histogram(bins = 30, fill = "green", color = "black") +
+  geom_histogram(aes(y = after_stat(density)), bins = 30, fill = "green", color = "black") +
+  stat_function(fun = dnorm, args = list(mean = mean_visit_squared, sd = sd_visit_squared), 
+                aes(color = "Gaussian Density"), size = 1) +
+  scale_color_manual(name = "Gaussian Parameters", 
+                     values = "black", 
+                     labels = sprintf("Mean = %.5f, SD = %.4f", mean_visit_squared, sd_visit_squared)) +
   ggtitle("Histogram of Quadratic Coefficient Estimates") +
   xlab("Coefficient of VISIT Squared") +
-  ylab("Frequency") +
-  theme_minimal()
+  ylab("Density") +
+  theme_minimal() +
+  scale_y_continuous(labels = function(x) x / 100) +
+  theme(legend.position = "top")
+
 
 # Save the plot if needed
-ggsave("plots/intercept_histogram.png", p0)
-ggsave("plots/visit_coeff_histogram.png", p1)
-ggsave("plots/visit_squared_coeff_histogram.png", p2)
+ggsave("plots/intercept_histogram.png", p0, height=10, width=8)
+ggsave("plots/visit_coeff_histogram.png", p1, height=10, width=8)
+ggsave("plots/visit_squared_coeff_histogram.png", p2, height=10, width=8)
 
 
 print(p0)
