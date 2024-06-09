@@ -145,7 +145,7 @@ summary_stats <- rs_1005_distinct %>%
   summarise(
     mean = mean(RSORRES, na.rm = TRUE),
     sd = sd(RSORRES, na.rm = TRUE),
-    n = n(),  # Counting the number of observations at each visit
+    n = n(),
     .groups = 'drop'  # Drop grouping after summarization
   ) %>%
   mutate(label = sprintf("%.2f (%.2f), n = %d", mean, sd, n))  # Format mean, sd, and n into a single string
@@ -304,24 +304,20 @@ print(mvarplot)
 ```
 
 ```{r, cache=TRUE}
-# Calculate the counts for each RSORRES value within each RSTEST and VISITNUM group
 rs_1005_counts <- rs_1005 %>%
   filter(RSTEST %in% RSTEST_list) %>%
   group_by(RSTEST, VISITNUM, RSORRES) %>%
   summarise(count = n(), .groups = 'drop')
 
-# Calculate the total counts for each RSTEST and VISITNUM group
 rs_1005_totals <- rs_1005_counts %>%
   group_by(RSTEST, VISITNUM) %>%
   summarise(total = sum(count), .groups = 'drop')
 
-# Join the counts with the totals to calculate proportions
 rs_1005_proportions <- rs_1005_counts %>%
   left_join(rs_1005_totals, by = c("RSTEST", "VISITNUM")) %>%
   mutate(proportion = count / total) %>%
   select(RSTEST, VISITNUM, RSORRES, proportion)
 
-# Pivot the data to have one row per RSTEST and VISITNUM combination
 rs_1005_proportions <- rs_1005_proportions %>%
   pivot_wider(names_from = RSORRES, values_from = proportion, values_fill = list(proportion = 0))
 ```
@@ -344,17 +340,6 @@ plot <- ggtern(data = rs_1005_bplot, aes(x = `0`, y = `1`, z = `2`)) +
   )
 return(plot)
 }
-
-#if (!file.exists("plots")) {
-  #dir.create("plots")
-#}
-
-#for (test_component in RSTEST_classes){
-  #plot <- plot_ternary(test_component)
-  #filename <- paste("plots/", test_component, ".png", sep = "")
-  #ggsave(filename, plot, device = "png")
-  #print(plot)
-#}
 ```
 
 Now that we have reached a conclusion we will perform PCA using scale = TRUE!
@@ -437,12 +422,6 @@ for (row in 2:num_features) {
 legend("right", inset = -0.3, legend = RSTEST_list, col = 1:num_features, lty = 1, xpd = NA, cex = 1)
 dev.off()
 
-# Bars to illustrate the number of data points at each VISITNUM
-#par(new = TRUE)
-#barplot(height = num_points, width = 0.01, col=rgb(0.5, 0.5, 0.5, 0.5), space = 5, axes = FALSE)
-#axis(side = 4, at = axTicks(4), labels = axTicks(4))
-#mtext("Sample Size", side=4, line=3)
-
 png("plots/PC2s_scaled.png", width = 5000, height = 2000, res = 300)
 par(mar = c(5, 4, 4, 2) + 0.1, oma = c(0, 0, 0, 18), cex.lab=1.6, cex.main=2.4)
 plot(1:num_visits, PC2s[1, ], type = "l", col = 1, xlab = "Visit", ylab = "PC2", xlim = c(1, num_visits), ylim = range(PC2s), main = "PC2 Weights (Scaled)")
@@ -466,7 +445,6 @@ num_features = length(RSTEST_list)
 PC1s_f <- matrix(NA, nrow=num_features, ncol=num_visits)
 PC2s_f <- matrix(NA, nrow=num_features, ncol=num_visits)
 num_points <- rep.int(0, times=num_visits)
-#sort(unique(rs_1005$VISITNUM)
 for (v in 0:5){
   X <- create_matrix(rs_1005, v)
   pca <- PCA(X, graph = FALSE, scale.unit = FALSE) 
@@ -479,7 +457,6 @@ for (v in 0:5){
 
 png("plots/PC1s_unscaled.png", width = 5000, height = 2000, res = 300)
 par(mar = c(5, 4, 4, 2) + 0.1, oma = c(0, 0, 0, 18), cex.lab=1.6, cex.main=2.4)
-# PC1s
 plot(1:num_visits, PC1s_f[1, ], type = "l", col = 1, xlab = "Visit", ylab = "PC1", xlim = c(1, num_visits), ylim = range(PC1s_f), main = "PC1 Weights (Raw)")
 for (row in 2:num_features) {
   lines(1:num_visits, PC1s_f[row, ], col = row)
@@ -489,8 +466,7 @@ dev.off()
 
 png("plots/PC2s_unscaled.png", width = 5000, height = 2000, res = 300)
 par(mar = c(5, 4, 4, 2) + 0.1, oma = c(0, 0, 0, 18), cex.lab=1.6, cex.main=2.4)
-# PC1s
-plot(1:num_visits, PC2s_f[1, ], type = "l", col = 1, xlab = "Visit", ylab = "PC1", xlim = c(1, num_visits), ylim = range(PC2s_f), main = "PC1 Weights (Raw)")
+plot(1:num_visits, PC2s_f[1, ], type = "l", col = 1, xlab = "Visit", ylab = "PC2", xlim = c(1, num_visits), ylim = range(PC2s_f), main = "PC1 Weights (Raw)")
 for (row in 2:num_features) {
   lines(1:num_visits, PC2s_f[row, ], col = row)
 }
@@ -499,13 +475,12 @@ dev.off()
 ```
 When we don't apply scaling to our principal component analysis, we see a very sparse distribution in the weights of both principal components through time. This further damages the rationale behind adding up the components equally to give a total NSAA score out of 34.
 ```{r}
-# Initialize new_trajectories matrix with zeros
-new_trajectories <- matrix(0, 131, 6)  # Assuming 131 is the total number of patients initially
+new_trajectories <- matrix(0, 131, 6) 
 
 # Initialize a vector to keep track of all patient IDs
-patient_ids <- seq_len(131)  # Assuming patient IDs go from 1 to 131
+patient_ids <- seq_len(131)
 
-# Initialize a logical vector to track which patients are still in the study
+# Initialize a logical vector to track patients
 active_patients <- rep(TRUE, 131)
 
 for (i in 0:5) {
@@ -517,39 +492,26 @@ for (i in 0:5) {
   # Update the active patients status based on the matrix size
   if (num_active < length(active_patients)) {
     # Assume the missing patients are the ones who dropped out
-    # This is a simplification; specific logic will depend on how patients drop out
     active_patients[(num_active + 1):length(active_patients)] <- FALSE
   }
   
-  # Find the indices of active patients
   active_indices <- which(active_patients)
   
-  # Calculate the product of X and the first column of the loadings matrix
   result_vector <- X %*% loadings_matrix[ ,1]
   
-  # Place the result in the correct positions in new_trajectories
   new_trajectories[active_indices, i + 1] <- result_vector
-  
-  # Assume the bottom-most rows in X are from patients who are still in the study
-  # (Adjust according to actual data scenario)
 }
 
-# Assuming new_trajectories is already filled as per previous steps
-
-# Create a dataframe from the matrix
 trajectory_df <- as.data.frame(new_trajectories)
 
-# Add a column for patient ID
 trajectory_df$PatientID <- seq_len(nrow(trajectory_df))
 
-# Melt the dataframe to long format for plotting
 trajectory_long_df <- pivot_longer(trajectory_df, 
                                    cols = -PatientID, 
                                    names_to = "Visit", 
                                    values_to = "Trajectory",
                                    names_prefix = "V")
 
-# Convert Visit to a numeric type for plotting (assuming visits are labeled V1, V2, ..., V6)
 trajectory_long_df$Visit <- as.numeric(gsub("V", "", trajectory_long_df$Visit))
 
 trajectory_long_df <- trajectory_long_df %>%
@@ -560,14 +522,13 @@ trajectory_long_df <- trajectory_long_df %>%
 
 # Plotting using ggplot2
 plot <- ggplot(trajectory_long_df, aes(x = Visit, y = Trajectory, group = PatientID)) +
-  geom_line(color = "grey", size = 1) +  # Change line color to grey
-  geom_point(aes(color = Dropout), size = 2, shape = 21, fill=NA) +  # Adjust point size and style
+  geom_line(color = "grey", size = 1) + 
+  geom_point(aes(color = Dropout), size = 2, shape = 21, fill=NA) +
   scale_color_manual(values = c("Active" = "blue", "Dropout" = "red")) +
   labs(x = "Visit Number", y = "Scaled NSAA Total", title = "Patient Trajectories Over Visits") +
   theme_minimal() +
   theme(legend.position = "bottom")
 
-# Display the plot
 print(plot)
 ggsave("plots/new_scaled_trajectories.png", plot, height=5, width=8)
 ```
@@ -632,15 +593,13 @@ for (reps in 1:1000){
 # 1000 bootstrap samples
 # histogram of results
 phi_data <- data.frame(Phi = boot_phis)
-# Calculate the mean and standard deviation of the phi values in the data
 phi_bar <- mean(phi_data$Phi)
 sd_phi <- sd(phi_data$Phi)
 
-# Plot histogram with Gaussian density overlay using the mean of phi_data
 phi_histogram <- ggplot(phi_data, aes(x = Phi)) + 
   geom_histogram(aes(y = ..density..), bins = 30, fill = "lightblue", color = "black") +
   stat_function(fun = dnorm, args = list(mean = phi_bar, sd = sd_phi),
-                aes(color = "Gaussian Density"), size = 1) + # Assign a color aesthetic to create a legend
+                aes(color = "Gaussian Density"), size = 1) +
   scale_color_manual(name = "Gaussian Parameters", 
                      values = "black", 
                      labels = paste("Mean =", round(phi_bar, 4), "SD =", round(sd_phi, 4))) +
@@ -659,15 +618,12 @@ print(mean_phi)
 
 ```{r}
 gls_coeffs <- function(patient_ids) {
-  # Filter data for the current bootstrap sample
   boot_data <- rs_1005_nsaa %>% filter(USUBJID %in% unique(patient_ids))
   
-  # Fit the GLS model
   gls_model <- gls(RSORRES ~ 1 + VISIT + I(VISIT^2), 
                    data = boot_data, 
                    correlation = corAR1(form = ~ 1 | USUBJID))
   
-  # Extract and return coefficients, including the intercept
   coeffs <- coef(gls_model)
   return(coeffs)
 }
@@ -675,19 +631,15 @@ gls_coeffs <- function(patient_ids) {
 boot_coeffs <- data.frame(Intercept = double(1000), VISIT = double(1000), VISIT_squared = double(1000))
 
 for (reps in 1:1000) {
-  # Sample with replacement from patient_ids
   boot_indices <- sample(patient_ids, size = length(patient_ids), replace = TRUE)
   
-  # Get coefficients for the bootstrap sample
   coeffs <- gls_coeffs(boot_indices)
   
-  # Store coefficients
   boot_coeffs$Intercept[reps] <- coeffs['(Intercept)']
   boot_coeffs$VISIT[reps] <- coeffs['VISIT']
   boot_coeffs$VISIT_squared[reps] <- coeffs['I(VISIT^2)']
 }
 
-# Calculate mean and sd for each coefficient
 mean_intercept <- mean(boot_coeffs$Intercept)
 sd_intercept <- sd(boot_coeffs$Intercept)
 mean_visit <- mean(boot_coeffs$VISIT)
@@ -739,7 +691,6 @@ p2 <- ggplot(boot_coeffs, aes(x = VISIT_squared)) +
   theme(legend.position = "top")
 
 
-# Save the plot if needed
 ggsave("plots/intercept_histogram.png", p0, height=10, width=8)
 ggsave("plots/visit_coeff_histogram.png", p1, height=10, width=8)
 ggsave("plots/visit_squared_coeff_histogram.png", p2, height=10, width=8)
@@ -749,7 +700,6 @@ print(p0)
 print(p1)
 print(p2)
 
-# Statistical summary for the intercept
 mean_intercept <- mean(boot_coeffs$Intercept)
 mean_visit <- mean(boot_coeffs$VISIT)
 mean_visit_squared <- mean(boot_coeffs$VISIT_squared)
@@ -809,38 +759,6 @@ The deliverable - if we have a treatment effect which causes an improvement in t
 
 How does clustering relate to this? If we have clusters then the model will change and the treatment effect may be different between clusters - so we performed clustering as a sense check to see if there is a meaningful way to separate the patients - idea for further work.
 
-```{r, cache=TRUE}
-# LCTM work
-rs_1005_nsaa$USUBJID_numeric <- as.numeric(factor(rs_1005_nsaa$USUBJID))
-
-lctm_1 <- hlme(fixed = RSORRES ~ VISIT + I(VISIT^2), 
-               subject = 'USUBJID_numeric',
-               ng = 1,
-               data = rs_1005_nsaa)
-lctm_2 <- gridsearch(hlme(fixed = RSORRES ~ VISIT + I(VISIT^2),
-                          mixture =~VISIT + I(VISIT^2),
-                          ng = 2,
-                          subject = 'USUBJID_numeric',
-                          data = rs_1005_nsaa),
-                     rep=100, maxiter=30, minit=lctm_1)
-lctm_3 <- gridsearch(hlme(fixed = RSORRES ~ VISIT + I(VISIT^2),
-                          mixture =~VISIT + I(VISIT^2),
-                          ng = 3,
-                          subject = 'USUBJID_numeric',
-                          data = rs_1005_nsaa),
-                     rep=100, maxiter=30, minit=lctm_1)
-lctm_4 <- gridsearch(hlme(fixed = RSORRES ~ VISIT + I(VISIT^2),
-                          mixture =~VISIT + I(VISIT^2),
-                          ng = 4,
-                          subject = 'USUBJID_numeric',
-                          data = rs_1005_nsaa),
-                     rep=100, maxiter=30, minit=lctm_1)
-```
-
-```{r}
-summarytable(lctm_1, lctm_2, lctm_3, lctm_4)
-summaryplot(lctm_1, lctm_2, lctm_3, lctm_4)
-```
 We will investigate how the size of the treatment effect affects its significance in the model
 ```{r}
 treatment_effect_fn <- function(data, num_bootstraps) {
@@ -848,26 +766,20 @@ treatment_effect_fn <- function(data, num_bootstraps) {
   patient_ids <- unique(data$USUBJID)  # Get unique patient IDs once
 
   for (i in 1:num_bootstraps) {
-    # Bootstrap: Sample patient IDs with replacement
     boot_patients <- sample(patient_ids, size = length(patient_ids), replace = TRUE)
     
-    # Filter data to only include sampled patient IDs
     sampled_data <- data %>% filter(USUBJID %in% boot_patients)
     
-    # Randomly select half of the bootstrap sample for treatment
     selected_patients <- sample(boot_patients, size = length(boot_patients) / 2)
     
-    # Assign treatment of 5 and adjust scores
     sampled_data <- sampled_data %>%
       mutate(TREAT = ifelse(USUBJID %in% selected_patients, 1, 0),
              RSORRES = ifelse(TREAT == 1, RSORRES + 5, RSORRES))
     
-    # Fit the GLS model
     gls_model <- gls(RSORRES ~ 1 + VISIT + I(VISIT^2) + TREAT, data = sampled_data, 
                      correlation = corAR1(form = ~ 1 | USUBJID))
     summary_gls <- summary(gls_model)
     
-    # Extract p-value
     coefficients <- summary_gls$tTable[, "Value"]
     standard_errors <- summary_gls$tTable[, "Std.Error"]
     z_scores <- coefficients / standard_errors
@@ -881,7 +793,6 @@ set.seed(123)
 bootstrap_p_values <- treatment_effect_fn(rs_1005_nsaa, num_bootstraps = 1000)
 sig_values <- sum(bootstrap_p_values < 0.05) / length(bootstrap_p_values)
 
-# Plot the p-values
 boot_teff <- ggplot(data.frame(PValue = bootstrap_p_values), aes(x = PValue)) +
   geom_histogram(bins = 30, fill = "skyblue", color = "black") +
   theme_minimal() +
@@ -896,7 +807,6 @@ Here we print out the proportion of significant p-values (i.e. p-values under 0.
 rho <- mean_phi # 0.96
 sigma <- 5 # modify std
 
-# Parameters
 N <- 100 # Number of patients
 visits <- 1:10 # Visits from 1 to 10
 treatment_effect <- 5
@@ -905,9 +815,6 @@ treatment_effect <- 5
 intercept <- 10
 visit_coef <- 2.5
 visit_squared_coef <- -0.5
-
-# Ensure half of the patients are treated (random)
-#treatment_assignments <- sample(c(rep(1, N/2), rep(0, N/2)))
 
 
 # Ensure first half of patients are treated - for t test purposes
@@ -926,7 +833,6 @@ simulate_ar1_residuals <- function(n, rho, sigma) {
   return(residuals)
 }
 
-# Function to generate data for one patient
 simulate_patient_data <- function(patient_id, treat, visits, rho, sigma) {
   n <- length(visits)
   ar1_residuals <- simulate_ar1_residuals(n, rho, sigma)
@@ -948,13 +854,13 @@ simulate_patient_data <- function(patient_id, treat, visits, rho, sigma) {
   )
 }
 
-# Simulate data for N patients and 10 visits
+
 patient_data <- lapply(1:N, function(i) {
   treat <- sample(c(0,1), 1)
   simulate_patient_data(i, treat, visits, rho, sigma)
 })
 
-# Combine all patient data into one data frame
+
 simulated_data <- bind_rows(patient_data)
 
 gls_model <- gls(RSORRES ~ 1 + VISIT + I(VISIT^2) + TREAT, 
@@ -965,21 +871,17 @@ print(summary_gls)
 ```
 
 ```{r}
-# Function to perform bootstrap analysis
 bootstrap_analysis <- function(data, num_bootstraps) {
   p_values <- numeric(num_bootstraps)
   
   for (i in 1:num_bootstraps) {
-    # Bootstrap: Sample with replacement by patient ID
     boot_patient_ids <- sample(unique(data$USUBJID), size = length(unique(data$USUBJID)), replace = TRUE)
     boot_data <- data %>% filter(USUBJID %in% boot_patient_ids)
     
-    # Fit the GLS model on the bootstrapped data
     gls_model <- gls(RSORRES ~ 1 + VISIT + I(VISIT^2) + TREAT, data = boot_data, 
                      correlation = corAR1(form = ~ 1 | USUBJID))
     summary_gls <- summary(gls_model)
     
-    # Extract the p-value for the treatment effect
     coefficients <- summary_gls$tTable[, "Value"]
     standard_errors <- summary_gls$tTable[, "Std.Error"]
     z_scores <- coefficients / standard_errors
@@ -989,17 +891,12 @@ bootstrap_analysis <- function(data, num_bootstraps) {
   return(p_values)
 }
 
-# Simulate the original data if not already available
 set.seed(123)
-# Assuming rho, sigma, N are already defined from previous work
-# Simulate data here if necessary...
 
-# Run bootstrap analysis
 set.seed(123)
 bootstrap_p_values <- bootstrap_analysis(simulated_data, num_bootstraps = 1000)
 sig_values <- sum(bootstrap_p_values < 0.05) / length(bootstrap_p_values)
 
-# Plot the distribution of p-values
 boot_sim_ps <- ggplot(data.frame(PValue = bootstrap_p_values), aes(x = PValue)) +
   geom_histogram(bins = 30, fill = "skyblue", color = "black") +
   theme_minimal() +
@@ -1009,21 +906,6 @@ print(sig_values)
 ggsave("")
 ```
 Ask chris about the statistical power stuff - why do I need to perform t-test on residuals. What does t-test on residuals actually show? Surely I perform a t-test on the actual simulated scores at a chosen time-point - probably best to choose baseline and also last visit. We probably won't be able to distinguish between patients at baseline but potentially at the last visit.
-
-```{r, warning=False}
-# Assuming you've installed and loaded simr and lme4
-library(lme4)
-library(simr)
-
-# Fit a model (example using lmer for a similar structure)
-model <- lmer(RSORRES ~ VISIT + I(VISIT^2) + TREAT + (1 | USUBJID), data = simulated_data)
-
-# Estimate power to detect a significant effect of treatment
-results <- powerSim(model, fixed("TREAT"), nsim = 50)  # nsim is the number of simulations
-
-# Check results
-print(results)
-```
 
 
 ```{r}
@@ -1035,14 +917,8 @@ intercept <- 10
 visit_coef <- 2.5
 visit_squared_coef <- -0.5
 
-# Ensure half of the patients are treated (random)
-#treatment_assignments <- sample(c(rep(1, N/2), rep(0, N/2)))
-
-
-# Ensure first half of patients are treated - for t test purposes
 treatment_assignments <- ifelse(1:N <= N/2, 1, 0)
 
-# Simulate AR(1) residuals for one patient (10 visits)
 simulate_ar1_residuals <- function(n, rho, sigma) {
   e <- rnorm(n, mean = 0, sd = sigma)
   residuals <- vector(length = n)
@@ -1055,7 +931,6 @@ simulate_ar1_residuals <- function(n, rho, sigma) {
   return(residuals)
 }
 
-# Function to generate data for one patient
 simulate_patient_data <- function(patient_id, treat, visits, rho, sigma) {
   n <- length(visits)
   ar1_residuals <- simulate_ar1_residuals(n, rho, sigma)
@@ -1066,7 +941,6 @@ simulate_patient_data <- function(patient_id, treat, visits, rho, sigma) {
              treat * treatment_effect +
              ar1_residuals
   
-  # Ensure correct range and integer type
   rsorres <- round(pmin(pmax(rsorres, 0), 34))
   
   data.frame(
@@ -1077,7 +951,6 @@ simulate_patient_data <- function(patient_id, treat, visits, rho, sigma) {
   )
 }
 
-# Simulate data for N patients and 10 visits
 patient_data <- lapply(1:N, function(i) {
   treat <- sample(c(0,1), 1)
   simulate_patient_data(i, treat, visits, rho, sigma)
@@ -1098,7 +971,7 @@ treatment_effects <- seq(0, 5, length.out = 5)
 sample_sizes <- c(50, 100, 150, 200)
 results <- data.frame()
 
-# Loop over sample sizes and treatment effects
+
 set.seed(123)
 for (size in sample_sizes) {
   for (effect in treatment_effects) {
@@ -1107,7 +980,6 @@ for (size in sample_sizes) {
   }
 }
 
-# Plotting
 power_plots <- ggplot(results, aes(x = EffectSize, y = Power, color = as.factor(SampleSize))) +
   geom_line() +
   geom_hline(yintercept = 0.8, linetype = "dashed", color = "red")  +
