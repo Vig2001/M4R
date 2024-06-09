@@ -376,6 +376,8 @@ loadings_matrix <- pca_result$rotation
 # might be best to use one leg
 biplot(pca_result, cex = 0.7, arrow.len=0.001, scale = 0.8)
 print(loadings_matrix[,1:2])
+
+plot(X0%*%loadings_matrix[, 1])
 ```
 
 ```{r, warning=FALSE}
@@ -496,7 +498,79 @@ legend("right", inset = -0.3, legend = RSTEST_list, col = 1:num_features, lty = 
 dev.off()
 ```
 When we don't apply scaling to our principal component analysis, we see a very sparse distribution in the weights of both principal components through time. This further damages the rationale behind adding up the components equally to give a total NSAA score out of 34.
+```{r}
+# Initialize new_trajectories matrix with zeros
+new_trajectories <- matrix(0, 131, 6)  # Assuming 131 is the total number of patients initially
 
+# Initialize a vector to keep track of all patient IDs
+patient_ids <- seq_len(131)  # Assuming patient IDs go from 1 to 131
+
+# Initialize a logical vector to track which patients are still in the study
+active_patients <- rep(TRUE, 131)
+
+for (i in 0:5) {
+  X <- create_matrix(rs_1005, i)
+  
+  # Determine the number of active patients for this visit
+  num_active <- nrow(X)
+  
+  # Update the active patients status based on the matrix size
+  if (num_active < length(active_patients)) {
+    # Assume the missing patients are the ones who dropped out
+    # This is a simplification; specific logic will depend on how patients drop out
+    active_patients[(num_active + 1):length(active_patients)] <- FALSE
+  }
+  
+  # Find the indices of active patients
+  active_indices <- which(active_patients)
+  
+  # Calculate the product of X and the first column of the loadings matrix
+  result_vector <- X %*% loadings_matrix[ ,1]
+  
+  # Place the result in the correct positions in new_trajectories
+  new_trajectories[active_indices, i + 1] <- result_vector
+  
+  # Assume the bottom-most rows in X are from patients who are still in the study
+  # (Adjust according to actual data scenario)
+}
+
+# Assuming new_trajectories is already filled as per previous steps
+
+# Create a dataframe from the matrix
+trajectory_df <- as.data.frame(new_trajectories)
+
+# Add a column for patient ID
+trajectory_df$PatientID <- seq_len(nrow(trajectory_df))
+
+# Melt the dataframe to long format for plotting
+trajectory_long_df <- pivot_longer(trajectory_df, 
+                                   cols = -PatientID, 
+                                   names_to = "Visit", 
+                                   values_to = "Trajectory",
+                                   names_prefix = "V")
+
+# Convert Visit to a numeric type for plotting (assuming visits are labeled V1, V2, ..., V6)
+trajectory_long_df$Visit <- as.numeric(gsub("V", "", trajectory_long_df$Visit))
+
+trajectory_long_df <- trajectory_long_df %>%
+  group_by(PatientID) %>%
+  mutate(Dropout = ifelse(Trajectory == 0, "Dropout", "Active"),
+         Trajectory = ifelse(Dropout == "Dropout" & lag(Dropout, default = "Active") == "Active", 0, Trajectory),
+         Trajectory = ifelse(lag(Dropout, default = "Active") == "Dropout", NA, Trajectory))
+
+# Plotting using ggplot2
+plot <- ggplot(trajectory_long_df, aes(x = Visit, y = Trajectory, group = PatientID)) +
+  geom_line(color = "grey", size = 1) +  # Change line color to grey
+  geom_point(aes(color = Dropout), size = 2, shape = 21, fill=NA) +  # Adjust point size and style
+  scale_color_manual(values = c("Active" = "blue", "Dropout" = "red")) +
+  labs(x = "Visit Number", y = "Scaled NSAA Total", title = "Patient Trajectories Over Visits") +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+
+# Display the plot
+print(plot)
+ggsave("plots/new_scaled_trajectories.png", plot, height=5, width=8)
+```
 We calculate the correlation parameter using gls on the total NSAA score.
 ```{r}
 # get dataset of only NSAA

@@ -40,7 +40,7 @@ p1 <- ggplot(data_centered, aes(x=wrist_width, y=height)) +
                arrow = arrow(length = unit(0.5, "cm"))) +
   xlim(-2, 2) +
   ylim(-25, 25) +
-  labs(title = "Raw Centered Data",
+  labs(title = "Raw Centred Data",
        x = "Human Wrist Width (cm)", y = "Human Height (cm)") +
   scale_color_manual(values = c("PC1" = "red", "PC2" = "blue")) +
   theme_classic() +
@@ -64,7 +64,7 @@ p2 <- ggplot(data_std, aes(x=wrist_width, y=height)) +
                arrow = arrow(length = unit(0.5, "cm"))) +
   xlim(-2, 2) +
   ylim(-6, 6) +
-  labs(title = "Standardized Data",
+  labs(title = "Standardised Data",
        x = "Human Wrist Width", y = "Human Height") +
   scale_color_manual(values = c("PC1" = "red", "PC2" = "blue")) +
   theme_classic() +
