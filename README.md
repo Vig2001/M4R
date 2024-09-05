@@ -2,4 +2,4 @@
 
 Overall Grade: 74.6%
 
-In this project I fitted a GLS model with an AR1 autocorrelation component, conducted power analysis and applied PCA to some real-life clinical data (NDA) to assess the correctness of the NSAA.
+In this project I fitted a GLS model with an AR1 autocorrelation component, conducted statistical power analysis and applied PCA to some real-life clinical data (NDA) to assess the correctness of the NSAA and propose a more suitable measurement.
