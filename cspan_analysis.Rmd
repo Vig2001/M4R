@@ -208,6 +208,9 @@ rs_1005_pivot <- rs_1005_data %>% select(USUBJID, RSTEST, RSORRES) %>%
   pivot_wider(id_cols = USUBJID,
               names_from = RSTEST,
               values_from = RSORRES)
+
+# write csv so that we can import into python and continue analysis there!
+write.csv(rs_1005_pivot, "baseline_scores.csv", row.names = FALSE)
 ```
 
 Let's now extract the matrix and create a function which generalises this process for any VISITNUM.
