@@ -27,7 +27,7 @@ library(boot)
 library(xtable)
 library(gridExtra)
 library(ggrepel)
-rs <- read_csv("rs.csv")
+rs <- read_csv("Data/rs.csv")
 ```
 
 We perform some data analysis. Firstly, we only obtain data which belong to the study DMD-1005. We then filter so that we only get values of each NSAA component at baseline for each patient. The VISITNUM are in a nonsensical order because some patients are assigned a visit number of 99. This has to be investigated - hypothesis is that the patients which were assigned a VISITNUM of 99 did not make it past screening.
@@ -128,9 +128,6 @@ dropoutplot <- ggplot(data = rs_plot, aes(x = VISITNUM, y = as.numeric(RSORRES),
        color = "Patient Status") +
   theme_minimal() +
   theme(legend.position = "bottom")
-
-print(dropoutplot)
-ggsave("plots/dropoutplot.png", dropoutplot, dpi=300)
 ```
 
 
@@ -174,8 +171,6 @@ diff_stagesplot <- ggplot(data = specific_patients, aes(x = VISITNUM, y = as.num
        color = "Patient Status") +
   theme_minimal() +
   theme(legend.position = "bottom")
-
-ggsave("plots/diffstagesplot.png", diff_stagesplot, height=5)
 ```
 
 Now we get the matrix that we input into PCA from this
@@ -208,9 +203,6 @@ rs_1005_pivot <- rs_1005_data %>% select(USUBJID, RSTEST, RSORRES) %>%
   pivot_wider(id_cols = USUBJID,
               names_from = RSTEST,
               values_from = RSORRES)
-
-# write csv so that we can import into python and continue analysis there!
-write.csv(rs_1005_pivot, "baseline_scores.csv", row.names = FALSE)
 ```
 
 Let's now extract the matrix and create a function which generalises this process for any VISITNUM.
@@ -262,8 +254,6 @@ In this setting, we have that each component of the NSAA takes a value of 0, 1 o
 # create correlation heatmap at baseline
 cov_matrix <- cor(X0)
 corrheatmap <- pheatmap(cov_matrix, scale='none')
-
-ggsave("plots/corrheatmap.png", corrheatmap, height=10, width=8, dpi=300)
 ```
 
 ```{r}
@@ -299,9 +289,6 @@ mvarplot <- ggplot(feature_stats, aes(x = prop_mean, y = variance, label = featu
   theme_minimal() +
   theme(legend.position = "bottom") +
   guides(color = guide_legend(title = NULL))
-
-# Save the plot
-ggsave("plots/mvarplot.png", mvarplot, width = 8, height = 6)
 
 print(mvarplot)
 ```
@@ -379,7 +366,6 @@ pca_facto <- PCA(X0, graph = FALSE, scale.unit=FALSE)
 # Generate and save scree plot
 my_screeplot <- fviz_screeplot(pca_facto, addlabels = TRUE, ylim = c(0, 100), 
                main = "Scree Plot")
-ggsave("plots/scree_plot_raw.png", my_screeplot, width=10, height=8, dpi=300)
 
 # Generate and save biplot
 my_biplot <- fviz_pca_biplot(pca_facto, geom = "point", col.var = "contrib", 
@@ -387,8 +373,6 @@ my_biplot <- fviz_pca_biplot(pca_facto, geom = "point", col.var = "contrib",
                 repel = TRUE, arrow.len = 0.001, 
                 label = "var", cex = 0.5, pointsize = 2, labelsize = 5, 
                 repel.box.padding = 0.2, repel.segment.size = 0.3)
-
-ggsave("plots/biplot_raw.png", my_biplot, width = 10, height = 8, dpi = 300)
 
 # loadings matrix
 loadings_matrix_facto <- pca_facto$var$coord
@@ -533,7 +517,6 @@ plot <- ggplot(trajectory_long_df, aes(x = Visit, y = Trajectory, group = Patien
   theme(legend.position = "bottom")
 
 print(plot)
-ggsave("plots/new_scaled_trajectories.png", plot, height=5, width=8)
 ```
 We calculate the correlation parameter using gls on the total NSAA score.
 ```{r}
@@ -613,8 +596,6 @@ phi_histogram <- ggplot(phi_data, aes(x = Phi)) +
   theme(legend.position = "top")
 
 print(phi_histogram)
-
-ggsave("plots/phihistogram.png", phi_histogram, height=10, width=8)
 mean_phi <- mean(boot_phis)
 print(mean_phi)
 ```
@@ -692,11 +673,6 @@ p2 <- ggplot(boot_coeffs, aes(x = VISIT_squared)) +
   theme_minimal() +
   scale_y_continuous(labels = function(x) x / 100) +
   theme(legend.position = "top")
-
-
-ggsave("plots/intercept_histogram.png", p0, height=10, width=8)
-ggsave("plots/visit_coeff_histogram.png", p1, height=10, width=8)
-ggsave("plots/visit_squared_coeff_histogram.png", p2, height=10, width=8)
 
 
 print(p0)
@@ -802,7 +778,6 @@ boot_teff <- ggplot(data.frame(PValue = bootstrap_p_values), aes(x = PValue)) +
   labs(title = "Distribution of Treatment Effect p-values from Bootstrap", x = "p-value", y = "Frequency")
 
 print(sig_values)
-ggsave("plots/boot_teff.png", boot_teff)
 ```
 Here we print out the proportion of significant p-values (i.e. p-values under 0.05). This is an unbiased estimator for the statistical power of the hypothesis test we are conducting (the hypothesis test is essentially is there enough evidence to say that the mean trajectory of an untreated and treated patient is the same), which is a test to investigate whether the treatment effect has an observable impact on the mean NSAA trajectories. When the proportion of significant p-values is close to 1 this illustrates we have a strong statistical test, which translates to the probability that the test correctly rejects the null hypothesis (in this scenario this is the hypothesis that the treatment effect has no observable impact). Therefore, if we have a proportion for \verb|sig_values| close to 1 then if there is indeed a treatment effect the test is high likely to detect it. Conversely, if it is closer to 0 then the test is unlikely to detect the treatment effect. We can see that a treatment effect of 5 gives us our desired result (a proportion > 0.8) for a sample size of 131 patients. Now we must simulate how the sample size affects the power.
 
@@ -906,7 +881,6 @@ boot_sim_ps <- ggplot(data.frame(PValue = bootstrap_p_values), aes(x = PValue)) 
   labs(title = "Distribution of Treatment Effect p-values from Bootstrap", x = "p-value", y = "Frequency")
 
 print(sig_values)
-ggsave("")
 ```
 Ask chris about the statistical power stuff - why do I need to perform t-test on residuals. What does t-test on residuals actually show? Surely I perform a t-test on the actual simulated scores at a chosen time-point - probably best to choose baseline and also last visit. We probably won't be able to distinguish between patients at baseline but potentially at the last visit.
 
@@ -993,5 +967,4 @@ power_plots <- ggplot(results, aes(x = EffectSize, y = Power, color = as.factor(
   theme_minimal()
 
 print(power_plots)
-ggsave("plots/power_curves.png", power_plots, width=10, height=8, dpi=300)
 ```
