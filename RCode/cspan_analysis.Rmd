@@ -2,9 +2,7 @@
 title: "dmd-cspan-analysis"
 author: "Vignesh Balaji"
 date: "2024-03-25"
-output:
-  pdf_document: default
-  html_document: default
+output: html_document
 ---
 
 ```{r setup, warning=FALSE, include=FALSE}
