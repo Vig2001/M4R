@@ -30,6 +30,8 @@ library(ggrepel)
 rs <- read_csv("Data/rs.csv")
 ```
 
+## Data Cleaning
+
 We perform some data analysis. Firstly, we only obtain data which belong to the study DMD-1005. We then filter so that we only get values of each NSAA component at baseline for each patient. The VISITNUM are in a nonsensical order because some patients are assigned a visit number of 99. This has to be investigated - hypothesis is that the patients which were assigned a VISITNUM of 99 did not make it past screening.
 
 ```{r, cache=TRUE}
@@ -104,7 +106,76 @@ mapping <- setNames(c(0, 1, 2, 3, 4, 5, 6, 7, 8, 9), c(0, 1, 4, 5, 6, 7, 8, 9, 1
 rs_1005$VISITNUM <- mapping[as.character(rs_1005$VISITNUM)]
 ```
 
-Now for some EDA
+Let's now extract the matrix and create a function which generalises this process for any VISITNUM.
+
+```{r,cache=TRUE}
+# first we have to investigate all the factors that make up RSTEST column
+RSTEST_classes <- unique(rs_1005$RSTEST)
+
+# remove NSAA1_Total and NSAA1_Total Linearized
+totals_to_remove <- which(RSTEST_classes %in% c("NSAA1-Total", "NSAA1-Total Linearized"))
+
+RSTEST_classes <- RSTEST_classes[-totals_to_remove]
+
+# also remove any grades, timing and velocity results
+keywords_to_remove <- c("Velocity", "Time", "Grade")
+misc_to_remove <- grep(paste0(paste(keywords_to_remove, collapse = "|"), collapse = "|"), RSTEST_classes)
+
+RSTEST_classes <- RSTEST_classes[-misc_to_remove]
+
+RSTEST_list <- as.list(RSTEST_classes)
+
+rs_1005_restricted <- rs_1005_base %>% filter(RSTEST %in% RSTEST_list)
+
+# remove duplicated rows
+rs_1005_data <- rs_1005_restricted %>% distinct(USUBJID, RSTEST, 
+                                                .keep_all = TRUE)
+
+# use pivot wider to create the desired df
+rs_1005_pivot <- rs_1005_data %>% select(USUBJID, RSTEST, RSORRES) %>%
+  pivot_wider(id_cols = USUBJID,
+              names_from = RSTEST,
+              values_from = RSORRES)
+```
+
+```{r,cache=TRUE}
+# convert to matrix removing the first column as that is subject ID
+X0 <- as.matrix(rs_1005_pivot[2:18])
+# fill na with mean value of the column
+X0 <- apply(X0, 2, as.numeric)
+column_means <- colMeans(X0, na.rm = TRUE) 
+X0[is.na(X0)] <- column_means[rep(1:ncol(X0), each = nrow(X0))]
+
+# define a function which does this for any VISITNUM
+create_matrix <- function(df, VN){
+  df_new <- df %>% filter(VISITNUM == VN)
+  RSTEST_classes <- unique(df$RSTEST)
+  totals_to_remove <- which(RSTEST_classes %in% c("NSAA1-Total", "NSAA1-Total Linearized"))
+  RSTEST_classes <- RSTEST_classes[-totals_to_remove]
+  keywords_to_remove <- c("Velocity", "Time", "Grade")
+  misc_to_remove <- grep(paste0(paste(keywords_to_remove, collapse = "|"), collapse = "|"), RSTEST_classes)
+
+  RSTEST_classes <- RSTEST_classes[-misc_to_remove]
+
+  RSTEST_list <- as.list(RSTEST_classes)
+
+  df_restricted <- df_new %>% filter(RSTEST %in% RSTEST_list)
+  df_data <- df_restricted %>% distinct(USUBJID, RSTEST, 
+                                                .keep_all = TRUE)
+  df_pivot <- df_data %>% select(USUBJID, RSTEST, RSORRES) %>%
+  pivot_wider(id_cols = USUBJID,
+              names_from = RSTEST,
+              values_from = RSORRES)
+  
+  X <- as.matrix(df_pivot[2:18])
+  X <- apply(X, 2, as.numeric)
+  column_means <- colMeans(X, na.rm = TRUE) 
+  X[is.na(X)] <- column_means[rep(1:ncol(X), each = nrow(X))]
+  return(X)
+}
+```
+
+## Visualising Trajectories
 ```{r}
 rs_1005_distinct <- rs_1005 %>%
   filter(RSTEST == "NSAA1-Total") %>%
@@ -129,7 +200,6 @@ dropoutplot <- ggplot(data = rs_plot, aes(x = VISITNUM, y = as.numeric(RSORRES),
   theme_minimal() +
   theme(legend.position = "bottom")
 ```
-
 
 Create table of means and s.d. for each visit
 ```{r}
@@ -173,78 +243,8 @@ diff_stagesplot <- ggplot(data = specific_patients, aes(x = VISITNUM, y = as.num
   theme(legend.position = "bottom")
 ```
 
-Now we get the matrix that we input into PCA from this
-```{r,cache=TRUE}
-# first we have to investigate all the factors that make up RSTEST column
 
-RSTEST_classes <- unique(rs_1005$RSTEST)
-
-# remove NSAA1_Total and NSAA1_Total Linearized
-totals_to_remove <- which(RSTEST_classes %in% c("NSAA1-Total", "NSAA1-Total Linearized"))
-
-RSTEST_classes <- RSTEST_classes[-totals_to_remove]
-
-# also remove any grades, timing and velocity results
-keywords_to_remove <- c("Velocity", "Time", "Grade")
-misc_to_remove <- grep(paste0(paste(keywords_to_remove, collapse = "|"), collapse = "|"), RSTEST_classes)
-
-RSTEST_classes <- RSTEST_classes[-misc_to_remove]
-
-RSTEST_list <- as.list(RSTEST_classes)
-
-rs_1005_restricted <- rs_1005_base %>% filter(RSTEST %in% RSTEST_list)
-
-# remove duplicated rows
-rs_1005_data <- rs_1005_restricted %>% distinct(USUBJID, RSTEST, 
-                                                .keep_all = TRUE)
-
-# use pivot wider to create the desired df
-rs_1005_pivot <- rs_1005_data %>% select(USUBJID, RSTEST, RSORRES) %>%
-  pivot_wider(id_cols = USUBJID,
-              names_from = RSTEST,
-              values_from = RSORRES)
-```
-
-Let's now extract the matrix and create a function which generalises this process for any VISITNUM.
-
-```{r,cache=TRUE}
-# convert to matrix removing the first column as that is subject ID
-X0 <- as.matrix(rs_1005_pivot[2:18])
-# fill na with mean value of the column
-X0 <- apply(X0, 2, as.numeric)
-column_means <- colMeans(X0, na.rm = TRUE) 
-X0[is.na(X0)] <- column_means[rep(1:ncol(X0), each = nrow(X0))]
-
-# define a function which does this for any VISITNUM
-create_matrix <- function(df, VN){
-  df_new <- df %>% filter(VISITNUM == VN)
-  RSTEST_classes <- unique(df$RSTEST)
-  totals_to_remove <- which(RSTEST_classes %in% c("NSAA1-Total", "NSAA1-Total Linearized"))
-  RSTEST_classes <- RSTEST_classes[-totals_to_remove]
-  keywords_to_remove <- c("Velocity", "Time", "Grade")
-  misc_to_remove <- grep(paste0(paste(keywords_to_remove, collapse = "|"), collapse = "|"), RSTEST_classes)
-
-  RSTEST_classes <- RSTEST_classes[-misc_to_remove]
-
-  RSTEST_list <- as.list(RSTEST_classes)
-
-  df_restricted <- df_new %>% filter(RSTEST %in% RSTEST_list)
-  df_data <- df_restricted %>% distinct(USUBJID, RSTEST, 
-                                                .keep_all = TRUE)
-  df_pivot <- df_data %>% select(USUBJID, RSTEST, RSORRES) %>%
-  pivot_wider(id_cols = USUBJID,
-              names_from = RSTEST,
-              values_from = RSORRES)
-  
-  X <- as.matrix(df_pivot[2:18])
-  X <- apply(X, 2, as.numeric)
-  column_means <- colMeans(X, na.rm = TRUE) 
-  X[is.na(X)] <- column_means[rep(1:ncol(X), each = nrow(X))]
-  return(X)
-}
-```
-
-Now we perform PCA, after constructing our matrix.
+## Baseline & Temporal MVar Relationship
 
 Should we use scale = TRUE or scale = FALSE? scale = TRUE will standardize each feature or variable before we perform PCA. This can be particularly useful in certain cases, for instance if one variable takes larger values it will exhibit larger variance by nature, this then translates to it potentially falsely dominating PC1. To combat this, we standardize the data so that we have a “global” scale for all variables, i.e. the analysis will be invariant to the measurement scale.
 
@@ -332,7 +332,8 @@ return(plot)
 }
 ```
 
-Now that we have reached a conclusion we will perform PCA using scale = TRUE!
+
+## PCA
 
 ```{r, warning=FALSE}
 # apply PCA
@@ -461,6 +462,9 @@ legend("right", inset = -0.3, legend = RSTEST_list, col = 1:num_features, lty = 
 dev.off()
 ```
 When we don't apply scaling to our principal component analysis, we see a very sparse distribution in the weights of both principal components through time. This further damages the rationale behind adding up the components equally to give a total NSAA score out of 34.
+
+## GLS Diagnostics
+
 ```{r}
 new_trajectories <- matrix(0, 131, 6) 
 
@@ -882,8 +886,8 @@ boot_sim_ps <- ggplot(data.frame(PValue = bootstrap_p_values), aes(x = PValue)) 
 
 print(sig_values)
 ```
-Ask chris about the statistical power stuff - why do I need to perform t-test on residuals. What does t-test on residuals actually show? Surely I perform a t-test on the actual simulated scores at a chosen time-point - probably best to choose baseline and also last visit. We probably won't be able to distinguish between patients at baseline but potentially at the last visit.
 
+## Statistical Power Analysis
 
 ```{r}
 # Using rough numbers
