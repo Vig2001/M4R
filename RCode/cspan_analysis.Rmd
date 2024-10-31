@@ -384,7 +384,7 @@ print(loadings_matrix_facto[, 1:2]) # loadings are a factor of e off prcomp - as
 ```{r, warning=FALSE}
 # plot trajectory of the weight for each component within PC1 and PC2 against time points
 
-num_visits =  6 #length(unique(rs_1005$VISITNUM))
+num_visits =  6 # number of visits until dropout affects results
 num_features = length(RSTEST_list)
 PC1s <- matrix(NA, nrow=num_features, ncol=num_visits)
 PC2s <- matrix(NA, nrow=num_features, ncol=num_visits)
