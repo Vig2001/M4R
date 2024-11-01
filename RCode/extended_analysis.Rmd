@@ -9,22 +9,40 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## R Markdown
-
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
+```{r}
+library(readr)
+library(tidyverse)
+library(FactoMineR)
+library(dplyr)
 ```
 
-## Including Plots
+# Extended PCA
 
-You can also embed plots, for example:
+Here we attempt to illustrate a proof of concept for a new one-dimensional scoring system based off the PC1 of the chosen individual items. The idea is that we shall inspect the barycentric plots of each item and remove items which play very little impact in differentiating between patients, as exemplified through their temporal mean-variance relationship.
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+## Baseline Analysis
+
+Read in baseline data
+```{r}
+baseline_scores <- read.csv("Data/baseline_scores.csv")
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+From visualising the plots, we can identify problematic variables as:
+
+\item Get to Sitting
+\item Rise from Floor
+\item Stand
+\item Stand on Heels
+\item Walk
+
+There are also some features that we should keep an eye on:
+
+\item Hop Left and Right Legs
+\item Stand up from Chair
+\item Stand on one Leg - Left & Right
+
+We should also consider whether we need assymmetric items - experiment with removing left leg activities and assume that right leg encodes enough information by itself.
+
+```{r}
+
+```
