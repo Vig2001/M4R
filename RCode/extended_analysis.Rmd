@@ -14,6 +14,8 @@ library(readr)
 library(tidyverse)
 library(FactoMineR)
 library(dplyr)
+library(caret)
+library(factoextra)
 ```
 
 # Extended PCA
@@ -41,8 +43,52 @@ There are also some features that we should keep an eye on:
 \item Stand up from Chair
 \item Stand on one Leg - Left & Right
 
-We should also consider whether we need assymmetric items - experiment with removing left leg activities and assume that right leg encodes enough information by itself.
+We should also consider whether we need asymmetric items - experiment with removing left leg activities and assume that right leg encodes enough information by itself.
 
 ```{r}
+drop_names <- c("NSAA1.Get.to.Sitting", "Rise.From.Floor", "NSAA1.Stand",
+                "NSAA1.Stand.on.Heels", "NSAA1.Walk")
 
+regularised_scores <- baseline_scores[, !(colnames(baseline_scores) %in% drop_names)]
+
+# create df without USUBJID
+X_base_df <- regularised_scores[, -1]
+X_base_df[] <- lapply(X_base_df, as.factor)
+
+# one hot encoding
+dummy <- dummyVars("~ .", data = X_base_df)
+X_base_enc <- data.frame(predict(dummy, newdata = X_base_df))
+
+X_base <- as.matrix(X_base_enc)
 ```
+
+# PCA and MCA
+
+Perform PCA on the encoded variables after scaling each column
+```{r}
+# scaling
+prop_ones <- colMeans(X_base == 1)
+
+scale_factors <- sqrt(prop_ones * (1 - prop_ones))
+
+X_base_scaled <- sweep(X_base, 2, scale_factors, "/")
+
+pca_base <- PCA(X_base_scaled, graph = FALSE, scale.unit=FALSE)
+
+base_screeplot <- fviz_screeplot(pca_base, addlabels = TRUE, ylim = c(0, 100), 
+               main = "Scree Plot")
+
+print(base_screeplot)
+```
+Let's perform MCA on the original regularised data. MCA is used as an alternative for PCA when using categorical data - from my understanding it is equivalent to PCA on one-hot encoded variables except it uses the chi-square distance rather than the euclidean distance.
+```{r}
+mca_base <- MCA(X_base_df, graph = FALSE)
+
+# Summary of MCA
+summary(mca_base)
+
+# Scree plot of eigenvalues to understand variance explained by dimensions
+fviz_screeplot(mca_base, addlabels = TRUE, ylim = c(0, 50))
+```
+
+It is clear that to capture a large proprotion of the variance we need to incorporate a multi-dimensional scoring system i.e. we have to instruct doctors to perform some form of matrix multiplication at each visit!
