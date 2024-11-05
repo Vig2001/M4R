@@ -165,12 +165,19 @@ create_matrix <- function(df, VN){
               names_from = RSTEST,
               values_from = RSORRES)
   
-  X <- as.matrix(df_pivot[2:18])
-  X <- apply(X, 2, as.numeric)
-  column_means <- colMeans(X, na.rm = TRUE) 
-  X[is.na(X)] <- column_means[rep(1:ncol(X), each = nrow(X))]
-  return(X)
+  write.csv(df_pivot, paste0("Data/Visit", VN, ".csv"))
+  
+  #X <- as.matrix(df_pivot[2:18])
+  #X <- apply(X, 2, as.numeric)
+  #column_means <- colMeans(X, na.rm = TRUE) 
+  #X[is.na(X)] <- column_means[rep(1:ncol(X), each = nrow(X))]
+  #return(X)
 }
+
+for (VN in 1:6){
+  create_matrix(rs_1005, VN)
+}
+
 ```
 
 ## Visualising Trajectories
