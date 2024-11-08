@@ -171,13 +171,13 @@ transformed_totals <- function(Visit_mat){
   pca_res <- PCA(Visit_mat, graph = F, scale.unit = T)
   eig_df <- as.data.frame(get_eigenvalue(pca_res))
   cum_var <- eig_df$cumulative.variance.percent
-  # use 75% as cut off for now - experiment
+  # select a cutoff - experiment
   ndim <- which.min(abs(cum_var - 90))
   if (cum_var[ndim] < 75){
     ndim <- ndim + 1
   }
   # set ncp in new PCA - experiment with it
-  pca_new <- PCA(Visit_mat, graph = F, scale.unit = T, ncp = 1)
+  pca_new <- PCA(Visit_mat, graph = F, scale.unit = T, ncp = ndim)
   loadings <- pca_new$var$cor
   # get transformed scores
   scores <- Visit_mat %*% loadings
