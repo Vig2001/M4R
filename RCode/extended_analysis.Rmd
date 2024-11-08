@@ -171,12 +171,12 @@ transformed_totals <- function(Visit_mat){
   pca_res <- PCA(Visit_mat, graph = F, scale.unit = T)
   eig_df <- as.data.frame(get_eigenvalue(pca_res))
   cum_var <- eig_df$cumulative.variance.percent
-  # use 75% as cut off for now
-  ndim <- which.min(abs(cum_var - 75))
+  # use 75% as cut off for now - experiment
+  ndim <- which.min(abs(cum_var - 90))
   if (cum_var[ndim] < 75){
     ndim <- ndim + 1
   }
-  # set ncp in new PCA
+  # set ncp in new PCA - experiment with it
   pca_new <- PCA(Visit_mat, graph = F, scale.unit = T, ncp = 1)
   loadings <- pca_new$var$cor
   # get transformed scores
@@ -195,6 +195,7 @@ totals_V4 <- transformed_totals(Visit4_mat)
 totals_V5 <- transformed_totals(Visit5_mat)
 ```
 
+Here we merge the datasets together to get a new dataset
 ```{r}
 list_of_totals <- list(totals_V0, totals_V1, totals_V2, totals_V3, totals_V4, totals_V5)
 
@@ -222,4 +223,33 @@ colnames(merged_totals) <- paste0("V", 0:(ncol(merged_totals) - 1))
 
 # Display the result
 print(merged_totals)
+```
+
+```{r}
+# Transpose the dataframe so that each row is plotted as a line
+library(ggplot2)
+library(reshape2)
+
+# Convert the dataframe to long format
+merged_totals$PatientID <- rownames(merged_totals)  # Add PatientID column
+merged_totals_long <- melt(
+  merged_totals, 
+  id.vars = "PatientID", 
+  variable.name = "TimePoint", 
+  value.name = "Value"
+)
+
+# Convert TimePoint to numeric for plotting
+merged_totals_long$TimePoint <- as.numeric(gsub("V", "", merged_totals_long$TimePoint))
+
+# Create a ggplot
+ggplot(merged_totals_long, aes(x = TimePoint, y = Value, color = PatientID, group = PatientID)) +
+  geom_line() +
+  labs(
+    title = "Plot of Each Row as a Line",
+    x = "Visit Number",
+    y = "Values"
+  ) +
+  theme_minimal() + 
+  theme(legend.position = "none")
 ```
