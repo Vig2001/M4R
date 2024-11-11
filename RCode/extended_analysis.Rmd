@@ -226,7 +226,6 @@ print(merged_totals)
 ```
 
 ```{r}
-# Transpose the dataframe so that each row is plotted as a line
 library(ggplot2)
 library(reshape2)
 
@@ -242,7 +241,6 @@ merged_totals_long <- melt(
 # Convert TimePoint to numeric for plotting
 merged_totals_long$TimePoint <- as.numeric(gsub("V", "", merged_totals_long$TimePoint))
 
-# Create a ggplot
 ggplot(merged_totals_long, aes(x = TimePoint, y = Value, color = PatientID, group = PatientID)) +
   geom_line() +
   labs(
@@ -252,4 +250,12 @@ ggplot(merged_totals_long, aes(x = TimePoint, y = Value, color = PatientID, grou
   ) +
   theme_minimal() + 
   theme(legend.position = "none")
+```
+
+# GLS
+
+Let's fit a GLS model to the data and evaluate whether we have less cross-sectional variation and then the next step would be to simulate a clinical trial again and perform statistical power analysis i.e. to see if we have made the clincial trials more powerful. Ask Chris on the treatment effect - how does it change if we transform the NSAA score.
+
+```{r}
+
 ```
