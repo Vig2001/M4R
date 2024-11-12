@@ -159,7 +159,7 @@ Visit5_mat <- as.matrix(encode(Visit5_df))
 Now we perform dynamic time-wise PCA.
 
 1. We apply PCA to each visit
-2. We obtain ndim - the number of dimensions where the explained_variance is first above 75%
+2. We obtain ndim - the number of dimensions where the explained_variance is first above 90%
 3. Get the loadings matrix with ndim principal components
 4. Transform the score
 5. Sum the scores to get the new total
@@ -173,11 +173,11 @@ transformed_totals <- function(Visit_mat){
   cum_var <- eig_df$cumulative.variance.percent
   # select a cutoff - experiment
   ndim <- which.min(abs(cum_var - 90))
-  if (cum_var[ndim] < 75){
+  if (cum_var[ndim] < 90){
     ndim <- ndim + 1
   }
   # set ncp in new PCA - experiment with it
-  pca_new <- PCA(Visit_mat, graph = F, scale.unit = T, ncp = ndim)
+  pca_new <- PCA(Visit_mat, graph = F, scale.unit = T, ncp = 2)
   loadings <- pca_new$var$cor
   # get transformed scores
   scores <- Visit_mat %*% loadings
@@ -225,6 +225,7 @@ colnames(merged_totals) <- paste0("V", 0:(ncol(merged_totals) - 1))
 print(merged_totals)
 ```
 
+How do we decide how many dimensions to pick at each visit? Randomly select patients? Cross validation of some sort? But we need a metric of how well the transformed dataset performs? As in how well does the new scoring system captures the variance in the dataset?
 ```{r}
 library(ggplot2)
 library(reshape2)
@@ -254,8 +255,15 @@ ggplot(merged_totals_long, aes(x = TimePoint, y = Value, color = PatientID, grou
 
 # GLS
 
-Let's fit a GLS model to the data and evaluate whether we have less cross-sectional variation and then the next step would be to simulate a clinical trial again and perform statistical power analysis i.e. to see if we have made the clincial trials more powerful. Ask Chris on the treatment effect - how does it change if we transform the NSAA score.
+Let's fit a GLS model to the data and evaluate whether we have less cross-sectional variation and then the next step would be to simulate a clinical trial again and perform statistical power analysis i.e. to see if we have made the clinical trials more powerful. Ask Chris on the treatment effect - how does it change if we transform the NSAA score.
 
 ```{r}
-
+library(nlme)
+gls_revised <- gls(Value ~ 1 + I(TimePoint) + I(TimePoint^2), 
+                   data = merged_totals_long,
+                   correlation = corAR1(form = ~ 1 | PatientID))
+revised_summ <- summary(gls_revised)
+print(revised_summ)
 ```
+
+The phi parameter gives us a good indication of interpretability, a higher $\phi$ indicates a larger correlation between consecutive timepoints which aligns with the hypothesis that a patient's score strongly correlates with their most previous score. When we use 1 PC, we get a phi of 0.08 essentially indicating a random scoring system - this probably won't generalise well. Moreover, as we increase the number of dimensions we get a negative phi which essentially indicates that a patient's score will be the opposite of their most recent score. This doesn't make sense - it indicates volatility! Ask Chris.
