@@ -16,6 +16,7 @@ library(FactoMineR)
 library(dplyr)
 library(caret)
 library(factoextra)
+library(mirt)
 ```
 
 # Extended PCA
@@ -197,7 +198,7 @@ transformed_totals <- function(Visit_mat){
     ndim <- ndim + 1
   }
   # set ncp in new PCA - experiment with it
-  pca_new <- PCA(Visit_mat, graph = F, scale.unit = T, ncp = ndim)
+  pca_new <- PCA(Visit_mat, graph = F, scale.unit = T, ncp = 1)
   loadings <- pca_new$var$cor
   # get transformed scores
   scores <- Visit_mat %*% loadings
@@ -262,7 +263,9 @@ merged_totals_long <- melt(
 # Convert TimePoint to numeric for plotting
 merged_totals_long$TimePoint <- as.numeric(gsub("V", "", merged_totals_long$TimePoint))
 
-ggplot(merged_totals_long, aes(x = TimePoint, y = Value, color = PatientID, group = PatientID)) +
+totals_cleaned <- merged_totals_long %>% filter(TimePoint >= 1)
+
+ggplot(totals_cleaned, aes(x = TimePoint, y = Value, color = PatientID, group = PatientID)) +
   geom_line() +
   labs(
     title = "Plot of Each Row as a Line",
@@ -272,6 +275,8 @@ ggplot(merged_totals_long, aes(x = TimePoint, y = Value, color = PatientID, grou
   theme_minimal() + 
   theme(legend.position = "none")
 ```
+
+Note that two recordings were made at baseline, hence why I plot from Visit 1 onwwards.
 
 # GLS
 
@@ -303,23 +308,19 @@ Use this naive model to compare performance of PCA, MCA and IRT.
 # Simulation of Naive Model
 
 ```{r}
-set.seed(123)
-n_ind <- 200
-n_items <- 2*17
-severity <- rbinom(n_ind, size = 1, prob = 0.5)
-severity <- runif(n_ind)
-eta <- 0 + 200*severity
-prob <- 1/(1+ exp(-eta))
-prob <- matrix(rep(prob, times = n_items), 
-               nrow = n_ind)
-Y <- matrix(0, nrow = n_ind, ncol = n_items)
-for(j in 1:n_items){
-  Y[,j] <- rbinom(n_ind, size = 1, prob = prob)
-}
-
-Y_pca <- prcomp(Y)
-screeplot(Y_pca)
-Y_pca$sdev[1]^2/sum(Y_pca$sdev^2)
+#set.seed(123)
+#n_ind <- 200
+#n_items <- 2*17
+#severity <- rbinom(n_ind, size = 1, prob = 0.5)
+#severity <- runif(n_ind)
+#eta <- 0 + 200*severity
+#prob <- 1/(1+ exp(-eta))
+#prob <- matrix(rep(prob, times = n_items), 
+              # nrow = n_ind)
+#Y <- matrix(0, nrow = n_ind, ncol = n_items)
+#for(j in 1:n_items){
+  #Y[,j] <- rbinom(n_ind, size = 1, prob = prob)
+#}
 ```
 
 ```{r}
@@ -333,8 +334,9 @@ latent_trait <- rnorm(n_samples, mean = 0, sd = 1) # use normal as hypothesised
 simulate_scores <- function(latent_trait, n_items) {
   scores <- matrix(0, nrow = length(latent_trait), ncol = n_items)
   for (i in 1:n_items) {
-    discrimination <- runif(1, 0.5, 2.0) # alter discrimination param
-    thresholds <- sort(runif(2, -2, 2)) # introduce thresholds for latent trait
+    discrimination <- runif(1, 0.5, 2.0) # beta_1
+    thresholds <- sort(runif(2, -2, 2)) # intercept for each state transition
+    # logits is a 2 x n matrix
     logits <- sapply(latent_trait, function(theta) discrimination * theta - thresholds)
     probs <- t(apply(logits, 2, function(x) cumsum(exp(x) / (1 + sum(exp(x))))))
     scores[, i] <- apply(probs, 1, function(p) sum(runif(1) > p))
@@ -342,7 +344,51 @@ simulate_scores <- function(latent_trait, n_items) {
   return(as.data.frame(scores))
 }
 
-# Generate dataset
 item_scores <- simulate_scores(latent_trait, n_items)
 colnames(item_scores) <- paste0("Item", 1:n_items)
+
+item_sims <- encode(item_scores)
+item_reg <- regularise(item_scores)
+simulated_PCA <- prcomp(item_reg)
+screeplot(simulated_PCA)
+simulated_PCA$sdev[1]^2/sum(simulated_PCA$sdev^2)
 ```
+
+```{r}
+
+grm_model <- mirt(item_reg, 1, itemtype = "graded")
+
+grm_latent_trait <- fscores(grm_model)
+
+summary(grm_model)
+```
+
+To Do List
+
+1. Learn how to interpret the GRM model summary
+2. Compare the correlations with the latent trait
+3. The power trial idea.
+
+# Simulate Power Trials
+
+## Control Group
+
+Set the time limit to be 48 weeks
+
+1. Use the simulated baseline scores above.
+
+2. Hypothesise a treatment decay factor for each transition ($\lambda_{21}$, $\lambda_{20}$, $\lambda_{10}$) for each item - assume that the decay factors are the same for each item to begin with, will have to consider non-uniform eventually. Might be useful to base off the median transition times based off the placebo data.
+
+3. Then use this to simulate the \textbf{final} scores for each item - start with exponential function to give the times of transitions and then compare with the time limit of 48 weeks. So if the time to get to zero 
+
+4. Transform the final scores for each individual using the a) NSAA framework b) PC1 at baseline framework c) Graded Response at baseline framework. This leaves us with a matrix / vector of total scores at the end of the trial.
+
+## Treatment Group
+
+Repeat all the steps as you did for the control group except the treatment effect will be a positive constant multiple of the original decays because it will elongate the time it takes for a patient to transition states.
+
+We now have another vector of total scores at the end of the trial for the treatment group. 
+
+## Power analysis
+
+Perform a t-test on the end vectors for the treatment and control vectors. Repeat this a 1000 times to find a representative statistic of the power of the test. Then repeat over multiple treatment effects and plot a power curve! The one that can give a more powerful test for a given treatment effect is better. This is good because essentially you won't require as many participants which is the main bottleneck of current clinical trials because the disease is rare.
