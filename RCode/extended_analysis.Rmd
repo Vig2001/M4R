@@ -46,14 +46,20 @@ There are also some features that we should keep an eye on:
 We should also consider whether we need asymmetric items - experiment with removing left leg activities and assume that right leg encodes enough information by itself.
 
 ```{r}
-drop_names <- c("NSAA1.Get.to.Sitting", "Rise.From.Floor", "NSAA1.Stand",
-                "NSAA1.Stand.on.Heels", "NSAA1.Walk")
+# superseded regularisation method
 
-Visit0_reg <- Visit0[, !(colnames(Visit0) %in% drop_names)]
+# drop_names <- c("NSAA1.Get.to.Sitting", "Rise.From.Floor", "NSAA1.Stand",
+                #"NSAA1.Stand.on.Heels", "NSAA1.Walk")
+
+#Visit0_reg <- Visit0[, !(colnames(Visit0) %in% drop_names)]
 
 # create df without USUBJID
-rownames(Visit0_reg) <- Visit0_reg$USUBJID
-Visit0_df <- Visit0_reg[, -1]
+#rownames(Visit0_reg) <- Visit0_reg$USUBJID
+#Visit0_df <- Visit0_reg[, -1]
+```
+
+```{r}
+Visit0_df <- Visit0
 Visit0_df[] <- lapply(Visit0_df, as.factor)
 
 # one hot encoding
@@ -63,18 +69,25 @@ Visit0_enc <- data.frame(predict(dummy, newdata = Visit0_df))
 Visit0_mat <- as.matrix(Visit0_enc)
 ```
 
+```{r}
+# regularise here
+regularise <- function(visit_mat, lower=0.2, upper=0.8){
+  prop_ones <- colMeans(visit_mat == 1)
+  cols_to_keep <- prop_ones >= lower & prop_ones <= upper
+
+  # drop=FALSE ensures we keep a matrix format
+  return(visit_mat[, cols_to_keep, drop=FALSE])
+}
+
+Visit0_mat <- regularise(Visit0_mat)
+rownames(Visit0_mat) <- Visit0_df$USUBJID
+```
+
 # PCA and MCA
 
 Perform PCA on the encoded variables after scaling each column
 ```{r}
-# scaling
-prop_ones <- colMeans(Visit0_mat == 1)
-
-scale_factors <- sqrt(prop_ones * (1 - prop_ones))
-
-Visit0_mat_scaled <- sweep(Visit0_mat, 2, scale_factors, "/")
-
-pca_base <- PCA(Visit0_mat_scaled, graph = FALSE, scale.unit=FALSE)
+pca_base <- PCA(Visit0_mat, graph = FALSE, scale.unit=TRUE)
 
 base_screeplot <- fviz_screeplot(pca_base, addlabels = TRUE, ylim = c(0, 100), 
                main = "Scree Plot")
@@ -83,7 +96,7 @@ print(base_screeplot)
 ```
 Let's perform MCA on the original regularised data. MCA is used as an alternative for PCA when using categorical data - from my understanding it is equivalent to PCA on one-hot encoded variables except it uses the chi-square distance rather than the euclidean distance.
 ```{r}
-mca_base <- MCA(Visit0_df, graph = FALSE)
+mca_base <- MCA(Visit0_df[, -1], graph = FALSE)
 
 # Summary of MCA
 summary(mca_base)
@@ -92,7 +105,7 @@ summary(mca_base)
 fviz_screeplot(mca_base, addlabels = TRUE, ylim = c(0, 50))
 ```
 
-It is clear that to capture a large proportion of the variance we need to incorporate a multi-dimensional scoring system i.e. we have to instruct doctors to perform some form of matrix multiplication at each visit! However, this lacks interpretability and may not generalise well to new data.
+It is clear that to capture a large proportion of the variance we need to incorporate a multi-dimensional scoring system i.e. we have to instruct doctors to perform some form of matrix multiplication at each visit! However, this lacks interpretability and may not generalise well to new data. MCA and PCA should be similar, the reason there is a slight difference is because we are regularising the dataset based off the columns being one-hot encoded, but not doing that for MCA!
 
 ## Temporal Analysis
 
@@ -129,9 +142,8 @@ for (file in file_names) {
 One-hot encode and convert to matrices for all dataframes.
 ```{r}
 clean_df <- function(df){
-  df_reg <- df[, !(colnames(df) %in% drop_names)]
-  rownames(df_reg) <- df_reg$USUBJID
-  df_reg <- df_reg[, -(1:2)]
+  rownames(df) <- df$USUBJID
+  df_reg <- df[, -(1:2)]
   return(df_reg)
 }
 
@@ -145,15 +157,23 @@ encode <- function(df){
 }
 
 Visit1_df <- as.data.frame(clean_df(Visit1))
-Visit1_mat <- as.matrix(encode(Visit1_df))
+Visit1_mat <- regularise(as.matrix(encode(Visit1_df)))
+
+
 Visit2_df <- as.data.frame(clean_df(Visit2))
-Visit2_mat <- as.matrix(clean_df(Visit2))
+Visit2_mat <- regularise(as.matrix(encode(Visit2_df)))
+
+
 Visit3_df <- as.data.frame(clean_df(Visit3))
-Visit3_mat <- as.matrix(encode(Visit3_df))
+Visit3_mat <- regularise(as.matrix(encode(Visit3_df)))
+
+
 Visit4_df <- as.data.frame(clean_df(Visit4))
-Visit4_mat <- as.matrix(encode(Visit4_df))
+Visit4_mat <- regularise(as.matrix(encode(Visit4_df)))
+
+
 Visit5_df <- as.data.frame(clean_df(Visit5))
-Visit5_mat <- as.matrix(encode(Visit5_df))
+Visit5_mat <- regularise(as.matrix(encode(Visit5_df)))
 ```
 
 Now we perform dynamic time-wise PCA.
@@ -177,7 +197,7 @@ transformed_totals <- function(Visit_mat){
     ndim <- ndim + 1
   }
   # set ncp in new PCA - experiment with it
-  pca_new <- PCA(Visit_mat, graph = F, scale.unit = T, ncp = 2)
+  pca_new <- PCA(Visit_mat, graph = F, scale.unit = T, ncp = ndim)
   loadings <- pca_new$var$cor
   # get transformed scores
   scores <- Visit_mat %*% loadings
@@ -188,11 +208,11 @@ transformed_totals <- function(Visit_mat){
 }
 
 totals_V0 <- transformed_totals(Visit0_mat)
-totals_V1 <- transformed_totals(Visit1_mat)
-totals_V2 <- transformed_totals(Visit2_mat)
-totals_V3 <- transformed_totals(Visit3_mat)
-totals_V4 <- transformed_totals(Visit4_mat)
-totals_V5 <- transformed_totals(Visit5_mat)
+totals_V1 <- transformed_totals(Visit1_mat[, colSums(is.na(Visit1_mat)) == 0])
+totals_V2 <- transformed_totals(Visit2_mat[, colSums(is.na(Visit2_mat)) == 0])
+totals_V3 <- transformed_totals(Visit3_mat[, colSums(is.na(Visit3_mat)) == 0])
+totals_V4 <- transformed_totals(Visit4_mat[, colSums(is.na(Visit4_mat)) == 0])
+totals_V5 <- transformed_totals(Visit5_mat[, colSums(is.na(Visit5_mat)) == 0])
 ```
 
 Here we merge the datasets together to get a new dataset
@@ -266,4 +286,63 @@ revised_summ <- summary(gls_revised)
 print(revised_summ)
 ```
 
-The phi parameter gives us a good indication of interpretability, a higher $\phi$ indicates a larger correlation between consecutive timepoints which aligns with the hypothesis that a patient's score strongly correlates with their most previous score. When we use 1 PC, we get a phi of 0.08 essentially indicating a random scoring system - this probably won't generalise well. Moreover, as we increase the number of dimensions we get a negative phi which essentially indicates that a patient's score will be the opposite of their most recent score. This doesn't make sense - it indicates volatility! Ask Chris.
+The phi parameter gives us a good indication of interpretability, a higher $\phi$ indicates a larger correlation between consecutive timepoints which aligns with the hypothesis that a patient's score strongly correlates with their most previous score. When we use 1 PC, we get a phi of 0.54 which is not too bad, but when we allow the number of dimensions to be dynamic we get a lower phi of 0.35 which illustrates a more random scoring system.
+
+IRT - unconstrained discrimination
+Simulate data to diagnose PCA
+
+Naive model:
+
+- Simulate disease severity using rnorm between 0 and 1 / runif(0, 1)
+- Simulate eta using beta %*% disease severity - vary $\beta_{1}$
+- Calculate $p_i$ using 1 / (1 + e ^ eta_i)
+- Make Y_ij = Bin(2, p_i)
+
+Use this naive model to compare performance of PCA, MCA and IRT.
+
+# Simulation of Naive Model
+
+```{r}
+set.seed(123)
+n_ind <- 200
+n_items <- 2*17
+severity <- rbinom(n_ind, size = 1, prob = 0.5)
+severity <- runif(n_ind)
+eta <- 0 + 200*severity
+prob <- 1/(1+ exp(-eta))
+prob <- matrix(rep(prob, times = n_items), 
+               nrow = n_ind)
+Y <- matrix(0, nrow = n_ind, ncol = n_items)
+for(j in 1:n_items){
+  Y[,j] <- rbinom(n_ind, size = 1, prob = prob)
+}
+
+Y_pca <- prcomp(Y)
+screeplot(Y_pca)
+Y_pca$sdev[1]^2/sum(Y_pca$sdev^2)
+```
+
+```{r}
+set.seed(42)
+
+n_samples <- 130
+n_items <- 17
+
+latent_trait <- rnorm(n_samples, mean = 0, sd = 1) # use normal as hypothesised
+
+simulate_scores <- function(latent_trait, n_items) {
+  scores <- matrix(0, nrow = length(latent_trait), ncol = n_items)
+  for (i in 1:n_items) {
+    discrimination <- runif(1, 0.5, 2.0) # alter discrimination param
+    thresholds <- sort(runif(2, -2, 2)) # introduce thresholds for latent trait
+    logits <- sapply(latent_trait, function(theta) discrimination * theta - thresholds)
+    probs <- t(apply(logits, 2, function(x) cumsum(exp(x) / (1 + sum(exp(x))))))
+    scores[, i] <- apply(probs, 1, function(p) sum(runif(1) > p))
+  }
+  return(as.data.frame(scores))
+}
+
+# Generate dataset
+item_scores <- simulate_scores(latent_trait, n_items)
+colnames(item_scores) <- paste0("Item", 1:n_items)
+```
