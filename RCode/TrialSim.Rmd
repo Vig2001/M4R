@@ -43,6 +43,18 @@ library(factoextra)
 library(mirt)
 ```
 
+One hot encoding function
+```{r}
+encode <- function(df){
+  df_fac <- lapply(df, as.factor)
+  onehot <- dummyVars("~ .", data = df_fac, fullRank = FALSE)
+  X_enc <- data.frame(predict(onehot, newdata = df_fac))
+  # Preserve original row names
+  rownames(X_enc) <- rownames(df)
+  return(X_enc)
+}
+```
+
 Simulate baseline scores of the whole cohort
 
 ```{r}
@@ -58,8 +70,10 @@ simulate_scores <- function(latent_trait, n_items) {
   for (i in 1:n_items) {
     discrimination <- runif(1, 0.5, 2.0) # beta_1
     thresholds <- sort(runif(2, -2, 2)) # intercept for each state transition
-    # logits is a 2 x n matrix
+    # logits is a 2 x n matrix (2 because of the two transitions 0->1, 1->2)
     logits <- sapply(latent_trait, function(theta) discrimination * theta - thresholds)
+    # assign probs based off formula for GRM
+    # probs is an n x 2 matrix
     probs <- t(apply(logits, 2, function(x) cumsum(exp(x) / (1 + sum(exp(x))))))
     scores[, i] <- apply(probs, 1, function(p) sum(runif(1) > p))
   }
@@ -68,6 +82,62 @@ simulate_scores <- function(latent_trait, n_items) {
 
 item_scores <- simulate_scores(latent_trait, n_items)
 colnames(item_scores) <- paste0("Item", 1:n_items)
-
-item_sims <- encode(item_scores)
 ```
+
+Split the baseline scores into a control and treatment group. In practise this would be done randomly but here we assign the first half to control.
+
+```{r}
+num_rows <- nrow(item_scores)
+ctrl_grp_base <- item_scores[1:floor(num_rows / 2), ]
+treat_grp_base <- item_scores[(floor(num_rows / 2) + 1):num_rows, ]
+
+# assign decay factors based off the trial duration being a year
+l_10 <- 1.2
+l_21 <- 1.5
+l_20 <- 0.8
+
+# recursive survival function
+simulate_decay <- function(current_state, l10, l21, l20, total_time, trial_time){
+  # base case
+  if (total_time >= trial_time){
+    return(current_state)
+  }
+  
+  # current_state = 0
+  if (current_state == 0){
+    return(0)
+  }
+  # current_state = 1
+  else if (current_state == 1){
+    t10 = rexp(1, l10)
+    total_time <- total_time + t10
+    
+    if (total_time <= trial_time){
+      return(simulate_decay(0, l10, l21, l20, total_time, trial_time))
+    }
+    else {
+      return(1)
+    }
+  }
+  # current_state = 2
+  else {
+    t21 = rexp(1, l21)
+    t20 = rexp(1, l20)
+    if (t20 <= t21){
+      total_time <- total_time + t20
+      return(simulate_decay(0, l10, l21, l20, total_time, trial_time))
+    }
+    else{
+      total_time <- total_time + t21
+      return(simulate_decay(1, l10, l21, l20, total_time, trial_time))
+    }
+  }
+}
+
+ctrl_grp_end <- as.data.frame(apply(ctrl_grp_base, 2, function(col){
+  sapply(col, function(state) simulate_decay(state, l_10, l_21, l_20, 0, 1))
+}))
+
+
+```
+
