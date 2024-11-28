@@ -1,0 +1,73 @@
+---
+title: "Simulation Trials"
+author: "Vignesh Balaji"
+date: "2024-11-28"
+output: html_document
+---
+
+# Simulate Power Trials
+
+## Control Group
+
+Set the time limit to be 48 weeks
+
+1. Use the simulated baseline scores above.
+
+2. Hypothesise a treatment decay factor for each transition ($\lambda_{21}$, $\lambda_{20}$, $\lambda_{10}$) for each item - assume that the decay factors are the same for each item to begin with, will have to consider non-uniform eventually. Might be useful to base off the median transition times based off the placebo data.
+
+3. Then use this to simulate the \textbf{final} scores for each item - start with exponential function to give the times of transitions and then compare with the time limit of 48 weeks. So if the time to get to zero 
+
+4. Transform the final scores for each individual using the a) NSAA framework b) PC1 at baseline framework c) Graded Response at baseline framework. This leaves us with a matrix / vector of total scores at the end of the trial.
+
+## Treatment Group
+
+Repeat all the steps as you did for the control group except the treatment effect will be a positive constant multiple of the original decays because it will elongate the time it takes for a patient to transition states.
+
+We now have another vector of total scores at the end of the trial for the treatment group. 
+
+## Power analysis
+
+Perform a t-test on the end vectors for the treatment and control vectors. Repeat this a 1000 times to find a representative statistic of the power of the test. Then repeat over multiple treatment effects and plot a power curve! The one that can give a more powerful test for a given treatment effect is better. This is good because essentially you won't require as many participants which is the main bottleneck of current clinical trials because the disease is rare.
+
+# Constant Effect
+
+In this initial study we assume that the treatment effect is constant, that is to say that the treatment affects each item of the NSAA uniformly.
+
+```{r}
+library(readr)
+library(tidyverse)
+library(FactoMineR)
+library(dplyr)
+library(caret)
+library(factoextra)
+library(mirt)
+```
+
+Simulate baseline scores of the whole cohort
+
+```{r}
+set.seed(42)
+
+n_samples <- 260
+n_items <- 17
+
+latent_trait <- rnorm(n_samples, mean = 0, sd = 1) # use normal as hypothesised
+
+simulate_scores <- function(latent_trait, n_items) {
+  scores <- matrix(0, nrow = length(latent_trait), ncol = n_items)
+  for (i in 1:n_items) {
+    discrimination <- runif(1, 0.5, 2.0) # beta_1
+    thresholds <- sort(runif(2, -2, 2)) # intercept for each state transition
+    # logits is a 2 x n matrix
+    logits <- sapply(latent_trait, function(theta) discrimination * theta - thresholds)
+    probs <- t(apply(logits, 2, function(x) cumsum(exp(x) / (1 + sum(exp(x))))))
+    scores[, i] <- apply(probs, 1, function(p) sum(runif(1) > p))
+  }
+  return(as.data.frame(scores))
+}
+
+item_scores <- simulate_scores(latent_trait, n_items)
+colnames(item_scores) <- paste0("Item", 1:n_items)
+
+item_sims <- encode(item_scores)
+```
