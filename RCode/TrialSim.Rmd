@@ -53,6 +53,49 @@ encode <- function(df){
   rownames(X_enc) <- rownames(df)
   return(X_enc)
 }
+
+encode_gpt <- function(df) {
+  # Convert all columns to factors
+  df_fac <- lapply(df, as.factor)
+  
+  # Identify columns with a single unique level
+  single_level_cols <- sapply(df_fac, function(col) length(levels(col)) == 1)
+  
+  # Separate single-level columns
+  single_level_data <- df_fac[single_level_cols]
+  multi_level_data <- df_fac[!single_level_cols]
+  
+  # One-hot encode multi-level columns
+  if (length(multi_level_data) > 0) {
+    onehot <- dummyVars("~ .", data = data.frame(multi_level_data), fullRank = FALSE)
+    X_enc <- data.frame(predict(onehot, newdata = data.frame(multi_level_data)))
+    
+    # Rename columns to match the desired format
+    colnames(X_enc) <- gsub(
+      pattern = "(.*?)\\.(.*?)$", 
+      replacement = "\\1.\\2", 
+      x = colnames(X_enc)
+    )
+  } else {
+    X_enc <- data.frame()
+  }
+  
+  # Re-add single-level columns with proper names
+  if (length(single_level_data) > 0) {
+    single_level_df <- data.frame(lapply(single_level_data, function(col) rep(1, length(col))))
+    
+    # Rename single-level columns to match the desired format
+    colnames(single_level_df) <- paste0("Item", seq_along(single_level_data), ".", unlist(lapply(single_level_data, levels)))
+    
+    # Combine multi-level and single-level data
+    X_enc <- cbind(X_enc, single_level_df)
+  }
+  
+  # Preserve original row names
+  rownames(X_enc) <- rownames(df)
+  
+  return(X_enc)
+}
 ```
 
 Simulate baseline scores of the whole cohort
@@ -67,24 +110,60 @@ latent_trait <- rnorm(n_samples, mean = 0, sd = 1) # use normal as hypothesised
 
 simulate_scores <- function(latent_trait, n_items) {
   scores <- matrix(0, nrow = length(latent_trait), ncol = n_items)
+  discrimination_params <- numeric(n_items) # Store discrimination parameters
+  thresholds_list <- list() # Store thresholds for each item
+  
   for (i in 1:n_items) {
     discrimination <- runif(1, 0.5, 2.0) # beta_1
-    thresholds <- sort(runif(2, -2, 2)) # intercept for each state transition
-    # logits is a 2 x n matrix (2 because of the two transitions 0->1, 1->2)
+    thresholds <- sort(runif(2, -2, 2)) # intercepts for state transitions
+    
+    discrimination_params[i] <- discrimination
+    thresholds_list[[i]] <- thresholds
+    
+    # 2 x n matrix
     logits <- sapply(latent_trait, function(theta) discrimination * theta - thresholds)
-    # assign probs based off formula for GRM
-    # probs is an n x 2 matrix
+    
+    # n x 2 matrix
     probs <- t(apply(logits, 2, function(x) cumsum(exp(x) / (1 + sum(exp(x))))))
     scores[, i] <- apply(probs, 1, function(p) sum(runif(1) > p))
   }
-  return(as.data.frame(scores))
+  
+  list(
+    scores = as.data.frame(scores), 
+    discrimination_params = discrimination_params,
+    thresholds = thresholds_list
+  )
 }
 
-item_scores <- simulate_scores(latent_trait, n_items)
+result <- simulate_scores(latent_trait, n_items)
+
+item_scores <- result$scores
 colnames(item_scores) <- paste0("Item", 1:n_items)
+
+discrimination_params <- result$discrimination_params
+
+thresholds <- result$thresholds
+
+# find the most important items - this might come in handy later on when assigning treatment effect non-uniformly
+barplot(discrimination_params, 
+        main = "Discrimination Parameters (β1)", 
+        xlab = "Items", 
+        ylab = "Discrimination (β1)", 
+        names.arg = paste0("Item", 1:n_items), 
+        col = "blue")
+
+# identify item difficulty based on thresholds
+threshold_means <- sapply(thresholds, mean) 
+difficulty_order <- order(threshold_means, decreasing = TRUE) 
+
+data.frame(
+  Item = paste0("Item", 1:n_items),
+  Mean_Threshold = threshold_means
+)[difficulty_order, ]
+
 ```
 
-Split the baseline scores into a control and treatment group. In practise this would be done randomly but here we assign the first half to control.
+Split the baseline scores into a control and treatment group. In practise this would be done randomly but here we assign the first half to control. Then assign decay rates based off the difficulty of each item which is given by the threshold parameter used to generate the data.
 
 ```{r}
 num_rows <- nrow(item_scores)
@@ -92,76 +171,117 @@ ctrl_grp_base <- item_scores[1:floor(num_rows / 2), ]
 treat_grp_base <- item_scores[(floor(num_rows / 2) + 1):num_rows, ]
 
 # assign decay factors based off the trial duration being a year
-l_10 <- 0.4
-l_21 <- 0.6
-l_20 <- 0.2
+rate_21 <- 0.8
+rate_10 <- 1.6
+rate_20 <- 0.4
 
+# Shift thresholds to make all values positive
+shift_constant <- abs(min(unlist(thresholds))) + 1
+shifted_thresholds <- lapply(thresholds, function(t) t + shift_constant)
+threshold_means <- sapply(shifted_thresholds, mean)
+
+
+# Generate decay rates proportional to shifted thresholds
+decay_rates <- sapply(threshold_means, function(mean_thresh) {
+  c(l_21 = mean_thresh * rate_21, 
+    l_10 = mean_thresh * rate_10, 
+    l_20 = mean_thresh * rate_20)
+})
+decay_rates <- t(decay_rates)
+
+decay_rates_df <- data.frame(
+  l_21 = decay_rates[, 1],
+  l_10 = decay_rates[, 2],
+  l_20 = decay_rates[, 3]
+)
+
+rownames(decay_rates_df) = paste0("Item", 1:n_items)
+```
+
+
+```{r}
 # recursive survival function
-simulate_decay <- function(current_state, l10, l21, l20, total_time, trial_time){
-  # base case
-  if (total_time >= trial_time){
-    return(current_state)
-  }
+simulate_decay <- function(current_state, l10, l21, l20, total_time, trial_time) {
+  # Base case: trial time exceeded
+  # if (total_time >= trial_time) {
+    #return(current_state)
+  #}
   
-  # current_state = 0
-  if (current_state == 0){
+  # state transitions
+  if (current_state == 0) {
     return(0)
-  }
-  # current_state = 1
-  else if (current_state == 1){
-    t10 = rexp(1, l10)
+  } else if (current_state == 1) {
+    # Transition from state 1 to 0
+    t10 <- rexp(1, l10)
     total_time <- total_time + t10
-    
-    if (total_time <= trial_time){
+    if (total_time <= trial_time) {
       return(simulate_decay(0, l10, l21, l20, total_time, trial_time))
-    }
-    else {
+    } else {
       return(1)
     }
-  }
-  # current_state = 2
-  else {
-    t21 = rexp(1, l21)
-    t20 = rexp(1, l20)
-    if (t20 <= t21){
+  } else if (current_state == 2) {
+    # transition from state 2 to either 1 or 0
+    t21 <- rexp(1, l21)
+    t20 <- rexp(1, l20)
+    if (t20 <= t21) {
       total_time <- total_time + t20
-      return(simulate_decay(0, l10, l21, l20, total_time, trial_time))
-    }
-    else{
+      if (total_time <= trial_time) {
+        return(simulate_decay(0, l10, l21, l20, total_time, trial_time))
+      } else {
+        return(2)
+      }
+    } else {
       total_time <- total_time + t21
-      return(simulate_decay(1, l10, l21, l20, total_time, trial_time))
+      if (total_time <= trial_time) {
+        return(simulate_decay(1, l10, l21, l20, total_time, trial_time))
+      } else {
+        return(2)
+      }
     }
   }
 }
 
+
 # apply column wise to get ctrl_grp_end
 ctrl_grp_end <- as.data.frame(apply(ctrl_grp_base, 2, function(col){
-  sapply(col, function(state) simulate_decay(state, l_10, l_21, l_20, 0, 1))
+  sapply(col, 
+         function(state) simulate_decay(state, decay_rates_df[col, 1],
+                                        decay_rates_df[col, 2], 
+                                        decay_rates_df[col, 3], 0, 1))
 }))
 
-# this is wrong we need to choose different rates for treatment effect you idiot
+
+# treatment effect
+teff = 1.3
+
 treat_grp_end <- as.data.frame(apply(treat_grp_base, 2, function(col){
-  sapply(col, function(state) simulate_decay(state, l_10, l_21, l_20, 0, 1))
+  sapply(col, 
+         function(state) simulate_decay(state, decay_rates_df[col, 1]/teff,
+                                        decay_rates_df[col, 2]/teff, 
+                                        decay_rates_df[col, 3]/teff, 0, 1))
 }))
 ```
 
-Transform using NSAA and getting PC1 from the one-hot - I guess two things here we either get PC1 from each group separately or we get a universal PC1 from the entire group. I think it makes sense to get it from each group separately.
+Transform using NSAA and getting PC1 from the one-hot.
 ```{r}
 # NSAA transformation - add up each item score individually
-ctrl_scores_nsaa <- as.matrix(ctrl_grp_end) %*% rep(1, times = ncol(ctrl_grp_end))
-treat_scores_nsaa <- as.matrix(treat_grp_end) %*% rep(1, times = ncol(treat_grp_end))
+ctrl_base_nsaa <- rowSums(ctrl_grp_base)
+treat_base_nsaa <- rowSums(treat_grp_base)
+ctrl_end_nsaa <- rowSums(ctrl_grp_end)
+treat_end_nsaa <- rowSums(treat_grp_end)
 
-ctrl_pca <- prcomp(encode(ctrl_grp_base), scale. = T)
+pca <- prcomp(encode_gpt(item_scores), scale. = T)
+pc1 <- pca$rotation[, "PC1"]
 
-treat_pca <- prcomp(encode(treat_grp_base), scale. = T)
-treat_pc1 <- treat_pca$rotation[ ,"PC1"]
+ctrl_pc1_reg <- pc1[names(pc1) %in% colnames(encode_gpt(ctrl_grp_end))]
+treat_pc1_reg <- pc1[names(pc1) %in% colnames(encode_gpt(treat_grp_end))]
 
-ctrl_pc1_reg <- ctrl_pc1[names(ctrl_pc1) %in% colnames(encode(ctrl_grp_end))]
-treat_pc1_reg <- ctrl_pc1[names(treat_pc1) %in% colnames(encode(treat_grp_end))]
+ctrl_base_pc1 <- as.matrix(encode_gpt(ctrl_grp_base)) %*% pc1
+treat_base_pc1 <- as.matrix(encode_gpt(treat_grp_base)) %*% pc1
+ctrl_end_pc1 <- as.matrix(encode_gpt(ctrl_grp_end)) %*% ctrl_pc1_reg
+treat_end_pc1 <- as.matrix(encode_gpt(treat_grp_end)) %*% treat_pc1_reg
 
-ctrl_scores_pc1 <- as.matrix(encode(ctrl_grp_end)) %*% ctrl_pc1_reg
-treat_scores_pc1 <- as.matrix(encode(treat_grp_end)) %*% treat_pc1_reg
 
-t.test(ctrl_scores_pc1, treat_scores_pc1)
-t.test(ctrl_scores_nsaa, treat_scores_nsaa)
+t.test(ctrl_end_pc1, treat_end_pc1)
+t.test(ctrl_end_nsaa, treat_end_nsaa)
 ```
