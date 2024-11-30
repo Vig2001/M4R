@@ -39,6 +39,7 @@ library(tidyverse)
 library(FactoMineR)
 library(dplyr)
 library(caret)
+library(fastDummies)
 library(factoextra)
 library(mirt)
 ```
@@ -47,54 +48,14 @@ One hot encoding function
 ```{r}
 encode <- function(df){
   df_fac <- lapply(df, as.factor)
-  onehot <- dummyVars("~ .", data = df_fac, fullRank = FALSE)
-  X_enc <- data.frame(predict(onehot, newdata = df_fac))
-  # Preserve original row names
-  rownames(X_enc) <- rownames(df)
-  return(X_enc)
-}
-
-encode_gpt <- function(df) {
-  # Convert all columns to factors
-  df_fac <- lapply(df, as.factor)
-  
-  # Identify columns with a single unique level
-  single_level_cols <- sapply(df_fac, function(col) length(levels(col)) == 1)
-  
-  # Separate single-level columns
-  single_level_data <- df_fac[single_level_cols]
-  multi_level_data <- df_fac[!single_level_cols]
-  
-  # One-hot encode multi-level columns
-  if (length(multi_level_data) > 0) {
-    onehot <- dummyVars("~ .", data = data.frame(multi_level_data), fullRank = FALSE)
-    X_enc <- data.frame(predict(onehot, newdata = data.frame(multi_level_data)))
-    
-    # Rename columns to match the desired format
-    colnames(X_enc) <- gsub(
-      pattern = "(.*?)\\.(.*?)$", 
-      replacement = "\\1.\\2", 
-      x = colnames(X_enc)
-    )
-  } else {
-    X_enc <- data.frame()
-  }
-  
-  # Re-add single-level columns with proper names
-  if (length(single_level_data) > 0) {
-    single_level_df <- data.frame(lapply(single_level_data, function(col) rep(1, length(col))))
-    
-    # Rename single-level columns to match the desired format
-    colnames(single_level_df) <- paste0("Item", seq_along(single_level_data), ".", unlist(lapply(single_level_data, levels)))
-    
-    # Combine multi-level and single-level data
-    X_enc <- cbind(X_enc, single_level_df)
-  }
-  
-  # Preserve original row names
-  rownames(X_enc) <- rownames(df)
-  
-  return(X_enc)
+  df_enc <- dummy_cols(
+    df_fac,
+    remove_first_dummy = F,
+    remove_selected_columns = T
+  )
+  colnames(df_enc) <- gsub("^\\.data\\.", "", colnames(df_enc))
+  colnames(df_enc) <- gsub("_", ".", colnames(df_enc))
+  return(df_enc)
 }
 ```
 
@@ -110,22 +71,33 @@ latent_trait <- rnorm(n_samples, mean = 0, sd = 1) # use normal as hypothesised
 
 simulate_scores <- function(latent_trait, n_items) {
   scores <- matrix(0, nrow = length(latent_trait), ncol = n_items)
-  discrimination_params <- numeric(n_items) # Store discrimination parameters
-  thresholds_list <- list() # Store thresholds for each item
+  discrimination_params <- numeric(n_items)
+  thresholds_list <- list()
   
   for (i in 1:n_items) {
-    discrimination <- runif(1, 0.5, 2.0) # beta_1
-    thresholds <- sort(runif(2, -2, 2)) # intercepts for state transitions
+    discrimination <- runif(1, 0.1, 2.0) # 'a' parameter
+    thresholds <- sort(runif(2, -2, 2))   # 'b' parameters (thresholds)
     
     discrimination_params[i] <- discrimination
     thresholds_list[[i]] <- thresholds
     
-    # 2 x n matrix
-    logits <- sapply(latent_trait, function(theta) discrimination * theta - thresholds)
-    
-    # n x 2 matrix
-    probs <- t(apply(logits, 2, function(x) cumsum(exp(x) / (1 + sum(exp(x))))))
-    scores[, i] <- apply(probs, 1, function(p) sum(runif(1) > p))
+    for (j in 1:length(latent_trait)) {
+      theta <- latent_trait[j]
+      # Compute cumulative probabilities
+      P_Y_geq_1 <- 1 / (1 + exp(-discrimination * (theta - thresholds[1])))
+      P_Y_geq_2 <- 1 / (1 + exp(-discrimination * (theta - thresholds[2])))
+      
+      # Compute category probabilities
+      P0 <- 1 - P_Y_geq_1
+      P1 <- P_Y_geq_1 - P_Y_geq_2
+      P2 <- P_Y_geq_2
+      
+      # Ensure probabilities sum to 1
+      probs <- c(P0, P1, P2)
+      
+      # Sample score based on probabilities
+      scores[j, i] <- sample(0:2, size = 1, prob = probs)
+    }
   }
   
   list(
@@ -202,10 +174,6 @@ rownames(decay_rates_df) = paste0("Item", 1:n_items)
 ```{r}
 # recursive survival function
 simulate_decay <- function(current_state, l10, l21, l20, total_time, trial_time) {
-  # Base case: trial time exceeded
-  # if (total_time >= trial_time) {
-    #return(current_state)
-  #}
   
   # state transitions
   if (current_state == 0) {
@@ -252,7 +220,7 @@ ctrl_grp_end <- as.data.frame(apply(ctrl_grp_base, 2, function(col){
 
 
 # treatment effect
-teff = 1.3
+teff = 1.4
 
 treat_grp_end <- as.data.frame(apply(treat_grp_base, 2, function(col){
   sapply(col, 
@@ -270,18 +238,25 @@ treat_base_nsaa <- rowSums(treat_grp_base)
 ctrl_end_nsaa <- rowSums(ctrl_grp_end)
 treat_end_nsaa <- rowSums(treat_grp_end)
 
-pca <- prcomp(encode_gpt(item_scores), scale. = T)
-pc1 <- pca$rotation[, "PC1"]
+# scale = F for now because certain columns may be constant!
+pca_ctrl_base <- prcomp(encode(ctrl_grp_base), scale. = F)
+pc1_ctrl_base <- pca_ctrl_base$rotation[, "PC1"]
+pca_treat_base <- prcomp(encode(treat_grp_base), scale. = F)
+pc1_treat_base <- pca_treat_base$rotation[, "PC1"]
 
-ctrl_pc1_reg <- pc1[names(pc1) %in% colnames(encode_gpt(ctrl_grp_end))]
-treat_pc1_reg <- pc1[names(pc1) %in% colnames(encode_gpt(treat_grp_end))]
+pca_ctrl_end <- prcomp(encode(ctrl_grp_end), scale. = F)
+pc1_ctrl_end <- pca_ctrl_end$rotation[, "PC1"]
+pca_treat_end <- prcomp(encode(treat_grp_end), scale. = F)
+pc1_treat_end <- pca_treat_end$rotation[, "PC1"]
 
-ctrl_base_pc1 <- as.matrix(encode_gpt(ctrl_grp_base)) %*% pc1
-treat_base_pc1 <- as.matrix(encode_gpt(treat_grp_base)) %*% pc1
-ctrl_end_pc1 <- as.matrix(encode_gpt(ctrl_grp_end)) %*% ctrl_pc1_reg
-treat_end_pc1 <- as.matrix(encode_gpt(treat_grp_end)) %*% treat_pc1_reg
+ctrl_base_pc1 <- as.matrix(encode(ctrl_grp_base)) %*% pc1_ctrl_base
+treat_base_pc1 <- as.matrix(encode(treat_grp_base)) %*% pc1_treat_base
+ctrl_end_pc1 <- as.matrix(encode(ctrl_grp_end)) %*% pc1_ctrl_end
+treat_end_pc1 <- as.matrix(encode(treat_grp_end)) %*% pc1_treat_end
 
 
-t.test(ctrl_end_pc1, treat_end_pc1)
-t.test(ctrl_end_nsaa, treat_end_nsaa)
+t.test(ctrl_end_pc1 - ctrl_base_pc1, treat_end_pc1 - treat_base_pc1)
+t.test(ctrl_end_nsaa - ctrl_base_nsaa, treat_end_nsaa - treat_base_nsaa)
 ```
+
+Findings: Using PC1 derived from baseline scores and using that as a replacement to the NSAA actually underperforms! Whereas, if we dynamically attain PC1 i.e. we find PC1 at each timepoint and transform the scores using this new score we find that this is superior to the NSAA.
