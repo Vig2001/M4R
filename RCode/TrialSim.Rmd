@@ -92,9 +92,9 @@ ctrl_grp_base <- item_scores[1:floor(num_rows / 2), ]
 treat_grp_base <- item_scores[(floor(num_rows / 2) + 1):num_rows, ]
 
 # assign decay factors based off the trial duration being a year
-l_10 <- 1.2
-l_21 <- 1.5
-l_20 <- 0.8
+l_10 <- 0.4
+l_21 <- 0.6
+l_20 <- 0.2
 
 # recursive survival function
 simulate_decay <- function(current_state, l10, l21, l20, total_time, trial_time){
@@ -134,10 +134,34 @@ simulate_decay <- function(current_state, l10, l21, l20, total_time, trial_time)
   }
 }
 
+# apply column wise to get ctrl_grp_end
 ctrl_grp_end <- as.data.frame(apply(ctrl_grp_base, 2, function(col){
   sapply(col, function(state) simulate_decay(state, l_10, l_21, l_20, 0, 1))
 }))
 
-
+# this is wrong we need to choose different rates for treatment effect you idiot
+treat_grp_end <- as.data.frame(apply(treat_grp_base, 2, function(col){
+  sapply(col, function(state) simulate_decay(state, l_10, l_21, l_20, 0, 1))
+}))
 ```
 
+Transform using NSAA and getting PC1 from the one-hot - I guess two things here we either get PC1 from each group separately or we get a universal PC1 from the entire group. I think it makes sense to get it from each group separately.
+```{r}
+# NSAA transformation - add up each item score individually
+ctrl_scores_nsaa <- as.matrix(ctrl_grp_end) %*% rep(1, times = ncol(ctrl_grp_end))
+treat_scores_nsaa <- as.matrix(treat_grp_end) %*% rep(1, times = ncol(treat_grp_end))
+
+ctrl_pca <- prcomp(encode(ctrl_grp_base), scale. = T)
+
+treat_pca <- prcomp(encode(treat_grp_base), scale. = T)
+treat_pc1 <- treat_pca$rotation[ ,"PC1"]
+
+ctrl_pc1_reg <- ctrl_pc1[names(ctrl_pc1) %in% colnames(encode(ctrl_grp_end))]
+treat_pc1_reg <- ctrl_pc1[names(treat_pc1) %in% colnames(encode(treat_grp_end))]
+
+ctrl_scores_pc1 <- as.matrix(encode(ctrl_grp_end)) %*% ctrl_pc1_reg
+treat_scores_pc1 <- as.matrix(encode(treat_grp_end)) %*% treat_pc1_reg
+
+t.test(ctrl_scores_pc1, treat_scores_pc1)
+t.test(ctrl_scores_nsaa, treat_scores_nsaa)
+```
