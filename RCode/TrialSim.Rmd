@@ -259,4 +259,4 @@ t.test(ctrl_end_pc1 - ctrl_base_pc1, treat_end_pc1 - treat_base_pc1)
 t.test(ctrl_end_nsaa - ctrl_base_nsaa, treat_end_nsaa - treat_base_nsaa)
 ```
 
-Findings: Using PC1 derived from baseline scores and using that as a replacement to the NSAA actually underperforms! Whereas, if we dynamically attain PC1 i.e. we find PC1 at each timepoint and transform the scores using this new score we find that this is superior to the NSAA.
+Findings: Using PC1 derived from baseline scores and using that as a replacement to the NSAA actually underperforms! Whereas, if we dynamically attain PC1 i.e. we find PC1 at each timepoint and transform the scores using this new score we find that this is superior to the NSAA. I guess that makes sense because the mean-variance relationship is dynamic i.e. certain variables are harder at different stages of the disease. And so maybe a static PC1 scoring system is actually more constraining than the NSAA!
