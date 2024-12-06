@@ -83,23 +83,22 @@ simulate_scores <- function(latent_trait, n_items) {
     
     for (j in 1:length(latent_trait)) {
       theta <- latent_trait[j]
-      # Compute cumulative probabilities
+      # cumulative probabilities (logistic function)
       P_Y_geq_1 <- 1 / (1 + exp(-discrimination * (theta - thresholds[1])))
       P_Y_geq_2 <- 1 / (1 + exp(-discrimination * (theta - thresholds[2])))
       
-      # Compute category probabilities
+      # state probabilities
       P0 <- 1 - P_Y_geq_1
       P1 <- P_Y_geq_1 - P_Y_geq_2
       P2 <- P_Y_geq_2
       
-      # Ensure probabilities sum to 1
       probs <- c(P0, P1, P2)
-      
-      # Sample score based on probabilities
+      # sampling scores (n_samples x n_items)
       scores[j, i] <- sample(0:2, size = 1, prob = probs)
     }
   }
   
+  # return dataframe, discrimination and threshold params for future ref
   list(
     scores = as.data.frame(scores), 
     discrimination_params = discrimination_params,
@@ -220,7 +219,7 @@ ctrl_grp_end <- as.data.frame(apply(ctrl_grp_base, 2, function(col){
 
 
 # treatment effect
-teff = 1.4
+teff = 1.14
 
 treat_grp_end <- as.data.frame(apply(treat_grp_base, 2, function(col){
   sapply(col, 
@@ -230,33 +229,71 @@ treat_grp_end <- as.data.frame(apply(treat_grp_base, 2, function(col){
 }))
 ```
 
-Transform using NSAA and getting PC1 from the one-hot.
+Transform using NSAA and getting PC1 from the one-hot encoded dataframes.
 ```{r}
 # NSAA transformation - add up each item score individually
-ctrl_base_nsaa <- rowSums(ctrl_grp_base)
-treat_base_nsaa <- rowSums(treat_grp_base)
+#ctrl_base_nsaa <- rowSums(ctrl_grp_base)
+#treat_base_nsaa <- rowSums(treat_grp_base)
 ctrl_end_nsaa <- rowSums(ctrl_grp_end)
 treat_end_nsaa <- rowSums(treat_grp_end)
 
-# scale = F for now because certain columns may be constant!
-pca_ctrl_base <- prcomp(encode(ctrl_grp_base), scale. = F)
-pc1_ctrl_base <- pca_ctrl_base$rotation[, "PC1"]
-pca_treat_base <- prcomp(encode(treat_grp_base), scale. = F)
-pc1_treat_base <- pca_treat_base$rotation[, "PC1"]
+#pca_ctrl_base <- prcomp(encode(ctrl_grp_base), scale. = F)
+#pc1_ctrl_base <- pca_ctrl_base$rotation[, "PC1"]
+#pca_treat_base <- prcomp(encode(treat_grp_base), scale. = F)
+#pc1_treat_base <- pca_treat_base$rotation[, "PC1"]
 
-pca_ctrl_end <- prcomp(encode(ctrl_grp_end), scale. = F)
-pc1_ctrl_end <- pca_ctrl_end$rotation[, "PC1"]
-pca_treat_end <- prcomp(encode(treat_grp_end), scale. = F)
-pc1_treat_end <- pca_treat_end$rotation[, "PC1"]
+#pca_ctrl_end <- prcomp(encode(ctrl_grp_end), scale. = F)
+#pc1_ctrl_end <- pca_ctrl_end$rotation[, "PC1"]
+#pca_treat_end <- prcomp(encode(treat_grp_end), scale. = F)
+#pc1_treat_end <- pca_treat_end$rotation[, "PC1"]
 
-ctrl_base_pc1 <- as.matrix(encode(ctrl_grp_base)) %*% pc1_ctrl_base
-treat_base_pc1 <- as.matrix(encode(treat_grp_base)) %*% pc1_treat_base
-ctrl_end_pc1 <- as.matrix(encode(ctrl_grp_end)) %*% pc1_ctrl_end
-treat_end_pc1 <- as.matrix(encode(treat_grp_end)) %*% pc1_treat_end
+combined_ctrl <- rbind(ctrl_grp_base, ctrl_grp_end)
+pca_ctrl <- prcomp(encode(combined_ctrl), scale.=T)
+pc1_ctrl <- pca_ctrl$rotation[, "PC1"]
 
+#pca <- prcomp(encode(item_scores), scale.=T)
+#pc1 <- pca$rotation[, "PC1"]
 
-t.test(ctrl_end_pc1 - ctrl_base_pc1, treat_end_pc1 - treat_base_pc1)
-t.test(ctrl_end_nsaa - ctrl_base_nsaa, treat_end_nsaa - treat_base_nsaa)
+#ctrl_cols <- intersect(colnames(pc1), colnames(encode(ctrl_grp_end)))
+#treat_cols <- intersect(colnames(pc1), colnames(encode(treat_grp_end)))
+
+#ctrl_base_pc1 <- as.matrix(encode(ctrl_grp_base)) %*% pc1_ctrl_base
+#treat_base_pc1 <- as.matrix(encode(treat_grp_base)) %*% pc1_treat_base
+ctrl_end_pc1 <- as.matrix(encode(ctrl_grp_end)) %*% 
+  pc1_ctrl[colnames(encode(ctrl_grp_end))]
+treat_end_pc1 <- as.matrix(encode(treat_grp_end)) %*%
+  pc1_ctrl[colnames(encode(treat_grp_end))]
 ```
 
-Findings: Using PC1 derived from baseline scores and using that as a replacement to the NSAA actually underperforms! Whereas, if we dynamically attain PC1 i.e. we find PC1 at each timepoint and transform the scores using this new score we find that this is superior to the NSAA. I guess that makes sense because the mean-variance relationship is dynamic i.e. certain variables are harder at different stages of the disease. And so maybe a static PC1 scoring system is actually more constraining than the NSAA!
+An issue that I had above was that one particular item score wasn't visible at baseline but was visible at the end. As a quick fix, I combined control group datasets so that PC1 had 51 dimensions i.e. all the one-hot encoded columns. Check with Chris if this is the correct way of going about things? What would be a more robust method? Note that in a clinical trial we may not expect all scores to be realised.
+
+Power comparison of the NSAA and dynamic PC1.
+```{r}
+n_pow <- n_samples / 2
+
+# standard deviations for power calculation
+sd_ctrl_nsaa <- sd(ctrl_end_nsaa)
+sd_treat_nsaa <- sd(treat_end_nsaa)
+sd_ctrl_pc1 <- sd(ctrl_end_pc1)
+sd_treat_pc1 <- sd(treat_end_pc1)
+
+var_nsaa <- (sd_ctrl_nsaa^2 + sd_treat_nsaa^2) / 2
+var_pc1 <- (sd_ctrl_pc1^2 + sd_treat_pc1^2) / 2
+
+# mean for power calculation
+mean_ctrl_nsaa <- mean(ctrl_end_nsaa)
+mean_treat_nsaa <- mean(treat_end_nsaa)
+mean_ctrl_pc1 <- mean(ctrl_end_pc1)
+mean_treat_pc1 <- mean(treat_end_pc1)
+
+d_nsaa <- mean_treat_nsaa - mean_ctrl_nsaa
+d_pc1 <- mean_treat_pc1 - mean_ctrl_pc1
+
+power.t.test(n = n_pow, delta = d_nsaa/sqrt(var_nsaa), sd = sqrt(var_nsaa),
+             sig.level = 0.05, type = "two.sample", alternative = "one.sided")
+
+power.t.test(n = n_pow, delta = d_pc1/sqrt(var_pc1), sd = sqrt(var_pc1),
+             sig.level = 0.05, type = "two.sample", alternative = "one.sided")
+```
+
+Findings: Now that I have performed the power calculations the PC1 derived from the control group (mainly from baseline) does better than the NSAA, as expected. This is because the standard deviation in the data is much smaller i.e. more homogeneous. But it seems very temperamental, in that treatment effects 1.1 - 1.4 lead to very small powers and then at 1.4 we have a big jump - is something going wrong in my calculation or is this the effect of the exponential distribution?
