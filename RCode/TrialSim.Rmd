@@ -151,7 +151,6 @@ shift_constant <- abs(min(unlist(thresholds))) + 1
 shifted_thresholds <- lapply(thresholds, function(t) t + shift_constant)
 threshold_means <- sapply(shifted_thresholds, mean)
 
-
 # Generate decay rates proportional to shifted thresholds
 decay_rates <- sapply(threshold_means, function(mean_thresh) {
   c(l_21 = mean_thresh * rate_21, 
@@ -219,7 +218,7 @@ ctrl_grp_end <- as.data.frame(apply(ctrl_grp_base, 2, function(col){
 
 
 # treatment effect
-teff = 1.14
+teff = 1.13
 
 treat_grp_end <- as.data.frame(apply(treat_grp_base, 2, function(col){
   sapply(col, 
@@ -231,69 +230,94 @@ treat_grp_end <- as.data.frame(apply(treat_grp_base, 2, function(col){
 
 Transform using NSAA and getting PC1 from the one-hot encoded dataframes.
 ```{r}
+scoring_method <- function(score, base=T, ctrl=T){
+  if (score == "NSAA"){
+    if (base){
+      return(rowSums(ctrl_grp_base))
+    }
+    return(rowSums(ctrl_grp_end))
+  }
+  if (score == "PCA"){
+    # hopefully this provides 52 columns
+    combined_ctrl <- rbind(ctrl_grp_base, ctrl_grp_end)
+    pca_ctrl <- prcomp(encode(combined_ctrl), scale.=T)
+    pc1_ctrl <- pca_ctrl$rotation[, "PC1"]
+    if (base){
+      ctrl_base_pc1 <- as.matrix(encode(ctrl_grp_base)) %*%
+        pc1_ctrl[colnames(encode(ctrl_grp_base))]
+      return(ctrl_base_pc1)
+    }
+    ctrl_end_pc1 <- as.matrix(encode(ctrl_grp_end)) %*%
+      pc1_ctrl[colnames(encode(ctrl_grp_end))]
+    return(ctrl_end_pc1)
+  }
+  # add IRT here once you know how to extract the transformed scores
+}
+
+ctrl_nsaa_base <- scoring_method("NSAA")
+ctrl_nsaa_end <- scoring_method("NSAA", base = F)
+treat_nsaa_base <- scoring_method("NSAA", ctrl = F)
+treat_nsaa_end <- scoring_method("NSAA", base = F, ctrl = F)
+
+ctrl_pc1_base <- scoring_method("PCA")
+ctrl_pc1_end <- scoring_method("PCA", base = F)
+treat_pc1_base <- scoring_method("PCA", ctrl = F)
+treat_pc1_end <- scoring_method("PCA", base = F, ctrl = F)
+```
+
+If function doesn't work
+```{r}
 # NSAA transformation - add up each item score individually
 #ctrl_base_nsaa <- rowSums(ctrl_grp_base)
 #treat_base_nsaa <- rowSums(treat_grp_base)
-ctrl_end_nsaa <- rowSums(ctrl_grp_end)
-treat_end_nsaa <- rowSums(treat_grp_end)
+#ctrl_end_nsaa <- rowSums(ctrl_grp_end)
+#treat_end_nsaa <- rowSums(treat_grp_end)
 
-#pca_ctrl_base <- prcomp(encode(ctrl_grp_base), scale. = F)
-#pc1_ctrl_base <- pca_ctrl_base$rotation[, "PC1"]
-#pca_treat_base <- prcomp(encode(treat_grp_base), scale. = F)
-#pc1_treat_base <- pca_treat_base$rotation[, "PC1"]
 
-#pca_ctrl_end <- prcomp(encode(ctrl_grp_end), scale. = F)
-#pc1_ctrl_end <- pca_ctrl_end$rotation[, "PC1"]
-#pca_treat_end <- prcomp(encode(treat_grp_end), scale. = F)
-#pc1_treat_end <- pca_treat_end$rotation[, "PC1"]
+#combined_ctrl <- rbind(ctrl_grp_base, ctrl_grp_end)
+#pca_ctrl <- prcomp(encode(combined_ctrl), scale.=T)
+#pc1_ctrl <- pca_ctrl$rotation[, "PC1"]
 
-combined_ctrl <- rbind(ctrl_grp_base, ctrl_grp_end)
-pca_ctrl <- prcomp(encode(combined_ctrl), scale.=T)
-pc1_ctrl <- pca_ctrl$rotation[, "PC1"]
 
-#pca <- prcomp(encode(item_scores), scale.=T)
-#pc1 <- pca$rotation[, "PC1"]
-
-#ctrl_cols <- intersect(colnames(pc1), colnames(encode(ctrl_grp_end)))
-#treat_cols <- intersect(colnames(pc1), colnames(encode(treat_grp_end)))
-
-#ctrl_base_pc1 <- as.matrix(encode(ctrl_grp_base)) %*% pc1_ctrl_base
-#treat_base_pc1 <- as.matrix(encode(treat_grp_base)) %*% pc1_treat_base
-ctrl_end_pc1 <- as.matrix(encode(ctrl_grp_end)) %*% 
-  pc1_ctrl[colnames(encode(ctrl_grp_end))]
-treat_end_pc1 <- as.matrix(encode(treat_grp_end)) %*%
-  pc1_ctrl[colnames(encode(treat_grp_end))]
+#ctrl_base_pc1 <- as.matrix(encode(ctrl_grp_base)) %*% pc1_ctrl[colnames(encode(ctrl_grp_base))]
+#treat_base_pc1 <- as.matrix(encode(treat_grp_base))
+#ctrl_end_pc1 <- as.matrix(encode(ctrl_grp_end)) %*% 
+  #pc1_ctrl[colnames(encode(ctrl_grp_end))]
+#treat_end_pc1 <- as.matrix(encode(treat_grp_end)) %*%
+  #pc1_ctrl[colnames(encode(treat_grp_end))]
 ```
 
 An issue that I had above was that one particular item score wasn't visible at baseline but was visible at the end. As a quick fix, I combined control group datasets so that PC1 had 51 dimensions i.e. all the one-hot encoded columns. Check with Chris if this is the correct way of going about things? What would be a more robust method? Note that in a clinical trial we may not expect all scores to be realised.
 
-Power comparison of the NSAA and dynamic PC1.
+Incorrect comparison of the NSAA and dynamic PC1.
 ```{r}
-n_pow <- n_samples / 2
+#n_pow <- n_samples / 2
 
 # standard deviations for power calculation
-sd_ctrl_nsaa <- sd(ctrl_end_nsaa)
-sd_treat_nsaa <- sd(treat_end_nsaa)
-sd_ctrl_pc1 <- sd(ctrl_end_pc1)
-sd_treat_pc1 <- sd(treat_end_pc1)
+#sd_ctrl_nsaa <- sd(ctrl_end_nsaa)
+#sd_treat_nsaa <- sd(treat_end_nsaa)
+#sd_ctrl_pc1 <- sd(ctrl_end_pc1)
+#sd_treat_pc1 <- sd(treat_end_pc1)
 
-var_nsaa <- (sd_ctrl_nsaa^2 + sd_treat_nsaa^2) / 2
-var_pc1 <- (sd_ctrl_pc1^2 + sd_treat_pc1^2) / 2
+#var_nsaa <- (sd_ctrl_nsaa^2 + sd_treat_nsaa^2) / 2
+#var_pc1 <- (sd_ctrl_pc1^2 + sd_treat_pc1^2) / 2
 
 # mean for power calculation
-mean_ctrl_nsaa <- mean(ctrl_end_nsaa)
-mean_treat_nsaa <- mean(treat_end_nsaa)
-mean_ctrl_pc1 <- mean(ctrl_end_pc1)
-mean_treat_pc1 <- mean(treat_end_pc1)
+#mean_ctrl_nsaa <- mean(ctrl_end_nsaa)
+#mean_treat_nsaa <- mean(treat_end_nsaa)
+#mean_ctrl_pc1 <- mean(ctrl_end_pc1)
+#mean_treat_pc1 <- mean(treat_end_pc1)
 
-d_nsaa <- mean_treat_nsaa - mean_ctrl_nsaa
-d_pc1 <- mean_treat_pc1 - mean_ctrl_pc1
+#d_nsaa <- mean_treat_nsaa - mean_ctrl_nsaa
+#d_pc1 <- mean_treat_pc1 - mean_ctrl_pc1
 
-power.t.test(n = n_pow, delta = d_nsaa/sqrt(var_nsaa), sd = sqrt(var_nsaa),
-             sig.level = 0.05, type = "two.sample", alternative = "one.sided")
+#power.t.test(n = n_pow, delta = d_nsaa/sqrt(var_nsaa), sd = sqrt(var_nsaa),
+             #sig.level = 0.05, type = "two.sample", alternative = "one.sided")
 
-power.t.test(n = n_pow, delta = d_pc1/sqrt(var_pc1), sd = sqrt(var_pc1),
-             sig.level = 0.05, type = "two.sample", alternative = "one.sided")
+#power.t.test(n = n_pow, delta = d_pc1/sqrt(var_pc1), sd = sqrt(var_pc1),
+             #sig.level = 0.05, type = "two.sample", alternative = "one.sided")
 ```
 
 Findings: Now that I have performed the power calculations the PC1 derived from the control group (mainly from baseline) does better than the NSAA, as expected. This is because the standard deviation in the data is much smaller i.e. more homogeneous. But it seems very temperamental, in that treatment effects 1.1 - 1.4 lead to very small powers and then at 1.4 we have a big jump - is something going wrong in my calculation or is this the effect of the exponential distribution?
+
+I am not doing the correct power calculation. You have to do 1000 simulations and fit a linear model control for baseline {NSAA, PC1} i.e. end = base*treatment + const. Then calculate power!
