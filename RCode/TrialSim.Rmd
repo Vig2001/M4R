@@ -304,6 +304,11 @@ ctrl_pc1_base <- scoring_method("PCA")
 ctrl_pc1_end <- scoring_method("PCA", base = F)
 treat_pc1_base <- scoring_method("PCA", ctrl = F)
 treat_pc1_end <- scoring_method("PCA", base = F, ctrl = F)
+
+ctrl_irt_base <-scoring_method("IRT")
+ctrl_irt_end <- scoring_method("IRT", base = F)
+treat_irt_base <- scoring_method("IRT", ctrl = F)
+treat_irt_end <- scoring_method("Irt", base = F, ctrl = F)
 ```
 
 If function doesn't work
@@ -315,7 +320,7 @@ If function doesn't work
 #treat_end_nsaa <- rowSums(treat_grp_end)
 
 
-combined_ctrl <- rbind(ctrl_grp_base, ctrl_grp_end)
+#combined_ctrl <- rbind(ctrl_grp_base, ctrl_grp_end)
 #pca_ctrl <- prcomp(encode(combined_ctrl), scale.=T)
 #pc1_ctrl <- pca_ctrl$rotation[, "PC1"]
 
@@ -327,14 +332,14 @@ combined_ctrl <- rbind(ctrl_grp_base, ctrl_grp_end)
 #treat_end_pc1 <- as.matrix(encode(treat_grp_end)) %*%
   #pc1_ctrl[colnames(encode(treat_grp_end))]
 
-grm <- mirt(encode(combined_ctrl), 1, itemtype = "graded")
-weights <- coef(grm, IRTpars = TRUE)
+#grm <- mirt(encode(combined_ctrl), 1, itemtype = "graded")
+#weights <- coef(grm, IRTpars = TRUE)
 
 # all 52 encoded item names
-item_names <- colnames(encode(combined_ctrl))
-irt_weights <- sapply(item_names, function(item) weights[[item]][, "a"])
+#item_names <- colnames(encode(combined_ctrl))
+#irt_weights <- sapply(item_names, function(item) weights[[item]][, "a"])
 
-ctrl_irt_base <- as.matrix(encode(ctrl_grp_base)) %*% irt_weights[colnames(encode(ctrl_grp_base))]
+#ctrl_irt_base <- as.matrix(encode(ctrl_grp_base)) %*% irt_weights[colnames(encode(ctrl_grp_base))]
 ```
 
 An issue that I had above was that one particular item score wasn't visible at baseline but was visible at the end. As a quick fix, I combined control group datasets so that PC1 had 51 dimensions i.e. all the one-hot encoded columns. Check with Chris if this is the correct way of going about things? What would be a more robust method? Note that in a clinical trial we may not expect all scores to be realised.
