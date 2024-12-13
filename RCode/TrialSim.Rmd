@@ -228,30 +228,71 @@ treat_grp_end <- as.data.frame(apply(treat_grp_base, 2, function(col){
 }))
 ```
 
-Transform using NSAA and getting PC1 from the one-hot encoded dataframes.
+Transform scores using NSAA, PCA and IRT frameworks.
 ```{r}
-scoring_method <- function(score, base=T, ctrl=T){
-  if (score == "NSAA"){
-    if (base){
-      return(rowSums(ctrl_grp_base))
+scoring_method <- function(score, base = TRUE, ctrl = TRUE) {
+  
+  # get correct subset of data
+  get_data <- function(base, ctrl) {
+    if (ctrl) {
+      if (base) return(ctrl_grp_base)
+      else return(ctrl_grp_end)
+    } else {
+      if (base) return(treat_grp_base)
+      else return(treat_grp_end)
     }
-    return(rowSums(ctrl_grp_end))
   }
-  if (score == "PCA"){
-    # hopefully this provides 52 columns
-    combined_ctrl <- rbind(ctrl_grp_base, ctrl_grp_end)
-    pca_ctrl <- prcomp(encode(combined_ctrl), scale.=T)
-    pc1_ctrl <- pca_ctrl$rotation[, "PC1"]
-    if (base){
-      ctrl_base_pc1 <- as.matrix(encode(ctrl_grp_base)) %*%
-        pc1_ctrl[colnames(encode(ctrl_grp_base))]
-      return(ctrl_base_pc1)
-    }
-    ctrl_end_pc1 <- as.matrix(encode(ctrl_grp_end)) %*%
-      pc1_ctrl[colnames(encode(ctrl_grp_end))]
-    return(ctrl_end_pc1)
+  
+  # NSAA helper
+  basic_sums <- function(base, ctrl) {
+    data <- get_data(base, ctrl)
+    return(rowSums(data))
   }
-  # add IRT here once you know how to extract the transformed scores
+  
+  # PCA helper
+  do_pca <- function(base, ctrl) {
+    # 52 items
+    combined <- rbind(ctrl_grp_base, ctrl_grp_end)
+    # PCA
+    pca_res <- prcomp(encode(combined), scale. = TRUE)
+    pc1 <- pca_res$rotation[, "PC1"]
+    
+    # Select the subset (base or end) and compute scores
+    subset_data <- encode(get_data(base, ctrl))
+    pc1_scores <- as.matrix(subset_data) %*% pc1[colnames(subset_data)]
+    return(pc1_scores)
+  }
+  
+  # IRT helper
+  do_irt <- function(base, ctrl) {
+    # 52 items
+    combined <- rbind(ctrl_grp_base, ctrl_grp_end)
+    
+    # GRM
+    grm <- mirt(encode(combined), 1, itemtype = "graded")
+    weights <- coef(grm, IRTpars = TRUE)
+    
+    item_names <- colnames(encode(combined))
+    irt_weights <- sapply(item_names, function(item) weights[[item]][, "a"])
+    
+    subset_data <- encode(get_data(base, ctrl))
+    irt_scores <- as.matrix(subset_data) %*% irt_weights[colnames(subset_data)]
+    return(irt_scores)
+  }
+  
+  # Main logic using switch. Order of conditions matters:
+  # We handle "score" first, and within each branch, handle ctrl/base as needed.
+  # Note that once we return, the function exits; no need for multiple returns at the end.
+  
+  result <- switch(score,
+    "NSAA" = basic_sums(base, ctrl),
+    "PCA"  = do_pca(base, ctrl),
+    "IRT"  = do_irt(base, ctrl),
+    # Default case: if unknown score, just return basic sums
+    basic_sums(base, ctrl)
+  )
+  
+  return(result)
 }
 
 ctrl_nsaa_base <- scoring_method("NSAA")
@@ -274,7 +315,7 @@ If function doesn't work
 #treat_end_nsaa <- rowSums(treat_grp_end)
 
 
-#combined_ctrl <- rbind(ctrl_grp_base, ctrl_grp_end)
+combined_ctrl <- rbind(ctrl_grp_base, ctrl_grp_end)
 #pca_ctrl <- prcomp(encode(combined_ctrl), scale.=T)
 #pc1_ctrl <- pca_ctrl$rotation[, "PC1"]
 
@@ -285,6 +326,15 @@ If function doesn't work
   #pc1_ctrl[colnames(encode(ctrl_grp_end))]
 #treat_end_pc1 <- as.matrix(encode(treat_grp_end)) %*%
   #pc1_ctrl[colnames(encode(treat_grp_end))]
+
+grm <- mirt(encode(combined_ctrl), 1, itemtype = "graded")
+weights <- coef(grm, IRTpars = TRUE)
+
+# all 52 encoded item names
+item_names <- colnames(encode(combined_ctrl))
+irt_weights <- sapply(item_names, function(item) weights[[item]][, "a"])
+
+ctrl_irt_base <- as.matrix(encode(ctrl_grp_base)) %*% irt_weights[colnames(encode(ctrl_grp_base))]
 ```
 
 An issue that I had above was that one particular item score wasn't visible at baseline but was visible at the end. As a quick fix, I combined control group datasets so that PC1 had 51 dimensions i.e. all the one-hot encoded columns. Check with Chris if this is the correct way of going about things? What would be a more robust method? Note that in a clinical trial we may not expect all scores to be realised.
