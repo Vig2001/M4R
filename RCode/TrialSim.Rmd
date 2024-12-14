@@ -218,7 +218,7 @@ ctrl_grp_end <- as.data.frame(apply(ctrl_grp_base, 2, function(col){
 
 
 # treatment effect
-teff = 1.5
+teff = 1.1
 
 treat_grp_end <- as.data.frame(apply(treat_grp_base, 2, function(col){
   sapply(col, 
@@ -264,18 +264,18 @@ scoring_method <- function(score, base = TRUE, ctrl = TRUE) {
   
   # IRT helper
   do_irt <- function(base, ctrl) {
-    # 52 items
-    combined <- rbind(ctrl_grp_base, ctrl_grp_end)
-    # GRM
-    grm <- mirt(encode(combined), 1, itemtype = "graded")
+    # base the weights off the whole baseline data
+    base_data <- item_scores
+    grm <- mirt(base_data, 1, itemtype = "graded")
     weights <- coef(grm, IRTpars = TRUE)
-    item_names <- colnames(encode(combined))
+    item_names <- colnames(base_data)
     # irt weights are based off the discrimination parameter a
     irt_weights <- sapply(item_names, function(item) weights[[item]][, "a"])
-    
-    subset_data <- encode(get_data(base, ctrl))
+    subset_data <- get_data(base, ctrl)
     irt_scores <- as.matrix(subset_data) %*% irt_weights[colnames(subset_data)]
-    return(irt_scores)
+    
+    # return weights so that we can compare with discrimination_params
+    return(list(scores = irt_scores, weights = irt_weights))
   }
   
   # Main logic using switch. Order of conditions matters:
@@ -303,10 +303,10 @@ ctrl_pc1_end <- scoring_method("PCA", base = F)
 treat_pc1_base <- scoring_method("PCA", ctrl = F)
 treat_pc1_end <- scoring_method("PCA", base = F, ctrl = F)
 
-ctrl_irt_base <-scoring_method("IRT")
-ctrl_irt_end <- scoring_method("IRT", base = F)
-treat_irt_base <- scoring_method("IRT", ctrl = F)
-treat_irt_end <- scoring_method("IRT", base = F, ctrl = F)
+ctrl_irt_base <-scoring_method("IRT")$scores
+ctrl_irt_end <- scoring_method("IRT", base = F)$scores
+treat_irt_base <- scoring_method("IRT", ctrl = F)$scores
+treat_irt_end <- scoring_method("IRT", base = F, ctrl = F)$scores
 ```
 
 An issue that I had above was that one particular item score wasn't visible at baseline but was visible at the end. As a quick fix, I combined control group datasets so that PC1 and IRT weights had 52 dimensions i.e. all the one-hot encoded columns. 
@@ -376,4 +376,10 @@ power_calc <- function(score_summary){
 nsaa_power <- power_calc(nsaa_summary)
 pca_power <- power_calc(pca_summary)
 irt_power <- power_calc(irt_summary)
+
+print(nsaa_power)
+print(pca_power)
+print(irt_power)
 ```
+
+PCA greatly outperforms the NSAA, which slightly outperforms the IRT in this one specific realisation. I need to test for multiple treatment effects and perform a bootstrap analysis to be sure. The mirt function fails to accurately estimate the dsicrimination parameters - a lot of them are quite far off!
