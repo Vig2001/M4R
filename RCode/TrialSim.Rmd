@@ -382,4 +382,13 @@ print(pca_power)
 print(irt_power)
 ```
 
-PCA greatly outperforms the NSAA, which slightly outperforms the IRT in this one specific realisation. I need to test for multiple treatment effects and perform a bootstrap analysis to be sure. The mirt function fails to accurately estimate the dsicrimination parameters - a lot of them are quite far off!
+PCA greatly outperforms the NSAA, which slightly outperforms the IRT in this one specific realisation. I need to test for multiple treatment effects and perform a bootstrap analysis to be sure. The mirt function fails to accurately estimate the dsicrimination parameters - a lot of them are quite far off! This might be because of scale indeterminancy - the small sample size means that the mirt package doesn't choose a scale that actually matches the latent N(0,1) variable.
+
+Next steps:
+1. For a chosen teff simulate the baseline scores (260 patients)
+2. Attain a bootstrap sample of this data and perform all the steps to calculate the power
+3. Do step 2 ~ 1000 times to get an aggregrate power estimate
+4. Change the teff (i.e. loop over the teff)
+5. Plot the power curves by teff
+
+Then potentially look into how the power changes with sample size for each scoring system.
