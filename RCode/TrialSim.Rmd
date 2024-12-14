@@ -363,5 +363,17 @@ irt_summary <- summary(lm_irt)
 To calculate the power of the test you find the estimated effect size given by the coefficient of Group1:Time1, the residual standard error which is seen at the bottom of the summary, the sample size and then put into the power.t.test function.
 
 ```{r}
+power_calc <- function(score_summary){
+  score_means <- score_summary$coefficients["Group1:Time1", "Estimate"]
+  score_sd <- score_summary$sigma
+  power_est <- power.t.test(n = 130, delta = score_means / score_sd, 
+                             sd = score_sd, sig.level = 0.05, 
+                             type = "two.sample", 
+                             alternative = "two.sided")$power
+  return(power_est)
+}
 
+nsaa_power <- power_calc(nsaa_summary)
+pca_power <- power_calc(pca_summary)
+irt_power <- power_calc(irt_summary)
 ```
