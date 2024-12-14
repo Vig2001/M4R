@@ -327,7 +327,7 @@ nsaa_data <- data.frame(
 )
 
 lm_nsaa <- lm(Score ~ Group * Time, data = nsaa_data)
-summary(lm_nsaa)
+nsaa_summary <- summary(lm_nsaa)
 
 pca_data <- data.frame(
   Score = c(ctrl_pc1_base, ctrl_pc1_end, treat_pc1_base, treat_pc1_end),
@@ -342,7 +342,7 @@ pca_data <- data.frame(
 )
 
 lm_pca <- lm(Score ~ Group * Time, data = pca_data)
-summary(lm_pca)
+pca_summary <- summary(lm_pca)
 
 irt_data <- data.frame(
   Score = c(ctrl_irt_base, ctrl_irt_end, treat_irt_base, treat_irt_end),
@@ -357,5 +357,11 @@ irt_data <- data.frame(
 )
 
 lm_irt <- lm(Score ~ Group * Time, data = irt_data)
-summary(lm_irt)
+irt_summary <- summary(lm_irt)
+```
+
+To calculate the power of the test you find the estimated effect size given by the coefficient of Group1:Time1, the residual standard error which is seen at the bottom of the summary, the sample size and then put into the power.t.test function.
+
+```{r}
+
 ```
