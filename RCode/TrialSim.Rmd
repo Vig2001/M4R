@@ -571,8 +571,16 @@ for (teff_idx in seq_along(teffs)){
 ```{r}
 print(power_mat)
 ```
+Findings:
+1. Power of PCA follows an increasing trend with treatment effect, which is as expected; a more effective treatment should create a more noticeable difference between control and treated groups.
 
-Parallel computing for speed - get Chris to see if he can do this!
+2. The power of IRT and NSAA do not increase with treatment effect - they seem relatively constant. This means that they cannot differentiate between effective and non-effective treatments as well or require a larger cohort in order to do so, which is impractical given the scarcity of the condition.
+
+3. PCA consistently outperforms both IRT and NSAA making it a more statistically powerful measurement, while the IRT and NSAA framework produce comparable results.
+
+Note this is only for 50 bootstraps to get more reliable results need to do 1000 but will need HPC.
+
+Parallel computing for speed - ask Chris to see if he knows how to do this / can do it on Imperial HPC.
 ```{r}
 library(doParallel)
 library(foreach)
