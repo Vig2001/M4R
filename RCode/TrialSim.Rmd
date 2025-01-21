@@ -559,4 +559,72 @@ for (teff_idx in seq_along(teffs)) {
 print(power_mat)
 ```
 
-Note this is only for 50 bootstraps to get more reliable results need to do 1000 but will need extra computing power.
+Note this is only for 50 bootstraps to get more reliable results need to do 1000 but will need extra computing power. Below are the power curves:
+
+```{r}
+# Add the treatment effect as a column for easier plotting
+power_df$Teff <- as.numeric(rownames(power_df))
+
+power_long <- melt(power_df, id.vars = "Teff", 
+                   variable.name = "Method", 
+                   value.name = "Power")
+# power_long has columns: Teff, Method, Power
+
+#-----------------------------------------------------------
+# 1) Plot NSAA & PCA only
+#-----------------------------------------------------------
+NSAA_PCA <- ggplot(
+    subset(power_long, Method %in% c("NSAA", "PCA")), 
+    aes(x = Teff, y = Power, colour = Method)
+  ) +
+  geom_line(size = 1) +
+  geom_point() +
+  geom_hline(yintercept = 0.8, colour = "red", linetype = "dashed") +
+  scale_y_continuous(limits = c(0, 1)) +
+  theme_minimal() +
+  theme(legend.position = c(0.05, 0.95),
+        legend.justification = c(0, 1)) +
+  labs(
+    title = "Power (NSAA & PCA) vs. Treatment Effect",
+    x = "Treatment Effect",
+    y = "Power"
+  )
+
+#-----------------------------------------------------------
+# 2) Plot all methods (NSAA, PCA, IRT)
+#-----------------------------------------------------------
+all_curves <- ggplot(power_long, aes(x = Teff, y = Power, colour = Method)) +
+  geom_line(size = 1) +
+  geom_point() +
+  geom_hline(yintercept = 0.8, colour = "red", linetype = "dashed") +
+  scale_y_continuous(limits = c(0, 1)) +
+  theme_minimal() +
+  theme(legend.position = c(0.05, 0.95),
+        legend.justification = c(0, 1)) +
+  labs(
+    title = "Power (All Methods) vs. Treatment Effect",
+    x = "Treatment Effect",
+    y = "Power"
+  )
+
+
+print(NSAA_PCA)
+print(all_curves)
+```
+
+```{r}
+ggsave(
+  filename = "../plots/NSAA_PCA_plot.png", 
+  plot = NSAA_PCA, 
+  width = 6,
+  height = 4,
+  dpi = 300
+)
+
+ggsave(
+  filename = "../plots/All_Methods_plot.pdf",
+  plot = all_curves,
+  width = 7,
+  height = 5
+)
+```
