@@ -363,7 +363,7 @@ lm_irt <- lm(Score ~ Group * Time, data = irt_data)
 irt_summary <- summary(lm_irt)
 ```
 
-To calculate the power of the test you find the estimated effect size given by the coefficient of Group1:Time1, the residual standard error which is seen at the bottom of the summary, the sample size and then put into the power.t.test function.
+To calculate the power of the test we find the estimated effect size given by the coefficient of Group1:Time1, the residual standard error from the bottom of the summary, the sample size and then use the power.t.test function.
 ```{r}
 power_calc <- function(score_summary, grp_size){
   score_means <- score_summary$coefficients["Group1:Time1", "Estimate"]
@@ -383,15 +383,6 @@ print(nsaa_power)
 print(pca_power)
 print(irt_power)
 ```
-
-Next steps:
-1. For a chosen teff simulate the decay of the baseline scores
-2. Attain a bootstrap sample of this data and perform all the steps to calculate the power
-3. Do step 2 ~ 1000 times to get an aggregrate power estimate
-4. Change the teff (i.e. loop over the teff)
-5. Plot the power curves by teff
-
-Then potentially look into how the power changes with sample size for each scoring system.
 
 Below we define the bootstrap-compatible scoring function adapted from above - only change is that it takes in the datasets as input. Note that during boot iterations the sampled datasets will change!
 ```{r}
@@ -462,98 +453,104 @@ scoring_boot <- function(score, cgb, cge, tgb, tge, base = TRUE, ctrl = TRUE) {
 ```
 
 
-Below we do not resimulate the baseline scores everytime, which means we can use the decay rates from decay_rates_df. We also bypass issue of potentially different baseline columns (recall issue we had with only 50 columns being visualised at baseline instead of 51).
+Below we do not resimulate the baseline scores everytime, which means we can use the decay rates from decay_rates_df. We also bypass issue of potentially different baseline columns (recall issue we had with only 50 columns being visualised at baseline instead of 51). Below we are finding empirical power estimates using bootstrap, for different teffs and method, then we can plot the power curves.
 ```{r}
 num_boots <- 50
-teffs <- seq(1.1, 2, length.out=5)
+teffs <- seq(1.1, 2, length.out = 10)
 scoring_methods <- c("NSAA", "PCA", "IRT")
 
-# placeholder for eventual dataframe
 power_mat <- matrix(NA, nrow = length(teffs), ncol = length(scoring_methods))
 rownames(power_mat) <- teffs
 colnames(power_mat) <- scoring_methods
 
-# timing NSAA, PCA and IRT
-method_times <- numeric(length(scoring_methods))
-names(method_times) <- scoring_methods
-
-for (teff_idx in seq_along(teffs)){
-  # loop over scoring methods as well
+for (teff_idx in seq_along(teffs)) {
   teff <- teffs[teff_idx]
   
-  for (method in scoring_methods){
+  for (method in scoring_methods) {
     
-    # initiliase num_boots vector to store power vals
+    # Timing stuff
+    cat("\nTeff:", teff, "   Method:", method, "\n")
+    pb <- txtProgressBar(min = 0, max = num_boots, style = 3)
+    start_time <- Sys.time()
+    
+    # Initialise num_boots vector to store power values
     power_iter <- numeric(num_boots)
     
-    for (i in 1:num_boots){
+    for (i in seq_len(num_boots)) {
       
-      # 1. randomly sample 260 patients from item_scores
-      sample_incides <- sample(1:num_rows, size = num_rows, replace = T)
-      sample_df <- item_scores[sample_incides, ]
+      # 1. Randomly sample patients from item_scores
+      sample_indices <- sample(seq_len(num_rows), size = num_rows, 
+                               replace = TRUE)
+      sample_df <- item_scores[sample_indices, ]
       
-      # 2. split the dataset in half so that we have a control and treat group
-      ctrlsample_base <- sample_df[1:floor(num_rows / 2), ]
+      # 2. Split into control and treatment
+      ctrlsample_base  <- sample_df[1:floor(num_rows / 2), ]
       treatsample_base <- sample_df[(floor(num_rows / 2) + 1):num_rows, ]
       
-      # 3. simulate decays using teff, method and global var decay_rates_df
-      ctrlsample_end <- as.data.frame(apply(ctrlsample_base, 2, function(col){
-        sapply(col, 
-               function(state) simulate_decay(state, 
-                                              decay_rates_df[col, 1],
-                                              decay_rates_df[col, 2],
-                                              decay_rates_df[col, 3], 
-                                              0, 1))
+      # 3. Simulate
+      ctrlsample_end <- as.data.frame(apply(ctrlsample_base, 2, function(col) {
+        sapply(col, function(state)
+          simulate_decay(state, decay_rates_df[col, 1],
+                                 decay_rates_df[col, 2],
+                                 decay_rates_df[col, 3],
+                                 0, 1))
       }))
       
-      treatsample_end <- as.data.frame(apply(treatsample_base, 2,
-                                             function(col){
-        sapply(col,
-               function(state) simulate_decay(state, 
-                                              decay_rates_df[col, 1] / teff,
-                                              decay_rates_df[col, 2] / teff,
-                                              decay_rates_df[col, 3] / teff, 
-                                              0, 1))
+      treatsample_end <- as.data.frame(apply(treatsample_base, 2, 
+                                             function(col) {
+        sapply(col, function(state)
+          simulate_decay(state, decay_rates_df[col, 1] / teff,
+                                 decay_rates_df[col, 2] / teff,
+                                 decay_rates_df[col, 3] / teff,
+                                 0, 1))
       }))
       
-      # 4. transform the scores using the scoring method
-      ctrl_base <- scoring_boot(method, ctrlsample_base,
-                                ctrlsample_end,
-                                treatsample_base, treatsample_end)
-      ctrl_end <- scoring_boot(method, ctrlsample_base, 
-                               ctrlsample_end, treatsample_base, 
-                               treatsample_end, base = F)
-      treat_base <- scoring_boot(method, ctrlsample_base,
-                                 ctrlsample_end, treatsample_base, 
-                                 treatsample_end, ctrl = F)
-      treat_end <- scoring_boot(method, ctrlsample_base, 
-                                ctrlsample_end, treatsample_base, 
-                                treatsample_end,
-                                base = F, ctrl = F)
-
-      # 5. Create dataframe to fit lm to
+      # 4. Transform the scores using the scoring method
+      ctrl_base  <- scoring_boot(method, ctrlsample_base,  ctrlsample_end,
+                                 treatsample_base, treatsample_end)
+      ctrl_end   <- scoring_boot(method, ctrlsample_base,  ctrlsample_end,
+                                 treatsample_base, treatsample_end, 
+                                 base = FALSE)
+      treat_base <- scoring_boot(method, ctrlsample_base,  ctrlsample_end,
+                                 treatsample_base, treatsample_end, 
+                                 ctrl = FALSE)
+      treat_end  <- scoring_boot(method, ctrlsample_base,  ctrlsample_end,
+                                 treatsample_base, treatsample_end,
+                                 base = FALSE, ctrl = FALSE)
+      
+      # 5. Build a dataframe for linear modelling
       boot_data <- data.frame(
-        Score = c(ctrl_base, ctrl_end, treat_base, 
-                  treat_end),
+        Score = c(ctrl_base, ctrl_end, treat_base, treat_end),
         Group = factor(c(rep(0, length(ctrl_base)),
                          rep(0, length(ctrl_end)),
                          rep(1, length(treat_base)),
                          rep(1, length(treat_end)))),
-        Time = factor(c(rep(0, length(ctrl_base)),
-                        rep(1, length(ctrl_end)),
-                        rep(0, length(treat_base)),
-                        rep(1, length(treat_end)))))
-
-      # 6. fit lm and get summary
+        Time  = factor(c(rep(0, length(ctrl_base)),
+                         rep(1, length(ctrl_end)),
+                         rep(0, length(treat_base)),
+                         rep(1, length(treat_end))))
+      )
+      
+      # 6. Fit the model and gather p-value
       lm_boot <- lm(Score ~ Group * Time, data = boot_data)
-      bootlm_summary <- summary(lm_boot)
-      # 7. calculate power
-      coefs <- bootlm_summary$coefficients
+      coefs <- summary(lm_boot)$coefficients
       p_val <- coefs["Group1:Time1", "Pr(>|t|)"]
-      power_iter[i] <- as.numeric(p_val < 0.05) # 1 if so else 0
+      
+      # 7. Record whether p < 0.05
+      power_iter[i] <- as.numeric(p_val < 0.05)
+      
+      # Update progress bar
+      setTxtProgressBar(pb, i)
     }
     
-    power_mat[teff_idx, method] <- mean(power_iter) # proportion of 1s = power
+    # Store power estimate
+    power_mat[teff_idx, method] <- mean(power_iter)
+    
+    # Timing stuff
+    close(pb)
+    
+    total_time <- as.numeric(difftime(Sys.time(), start_time, units = "secs"))
+    cat("Total elapsed time:", round(total_time, 2), "seconds\n")    
   }
 }
 ```
@@ -562,4 +559,4 @@ for (teff_idx in seq_along(teffs)){
 print(power_mat)
 ```
 
-Note this is only for 50 bootstraps to get more reliable results need to do 1000 but will need HPC. Parallel computing for speed - ask Chris to see if he knows how to do this / can do it on Imperial HPC.
+Note this is only for 50 bootstraps to get more reliable results need to do 1000 but will need extra computing power.
