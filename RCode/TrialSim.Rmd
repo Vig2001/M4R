@@ -67,7 +67,7 @@ set.seed(123)
 n_samples <- 1000
 n_items <- 17
 
-latent_trait <- rnorm(n_samples, mean = 0, sd = 1) # use standard normal
+latent_trait <- rnorm(n_samples, mean = 0, sd = 1) # higher score is better health
 
 simulate_scores <- function(latent_trait, n_items) {
   scores <- matrix(0, nrow = length(latent_trait), ncol = n_items)
@@ -75,8 +75,18 @@ simulate_scores <- function(latent_trait, n_items) {
   thresholds_list <- list()
   
   for (i in 1:n_items) {
-    discrimination <- runif(1, 0.1, 2.0) # 'a' parameter
-    thresholds <- sort(runif(2, -2, 2))   # 'b' parameters (thresholds)
+    # 'a' parameter - lognormal for positivity
+    #discrimination <- runif(1, 0.1, 2.0)
+    log_a <- rnorm(1, mean = 0, sd = 1)
+    discrimination <- exp(log_a)
+    # 'b' parameters (thresholds)
+    # Note, we want ascending=T because 2 is a healthier score
+    # So, only a healthy person would score 2
+    #thresholds <- sort(runif(2, -2, 2))
+    threshold1 <- rnorm(1, mean = 0, sd = 1)
+    gap <- 0.5 + abs(rnorm(1, mean = 0, sd = 0.5)) # always geq to 0.5
+    threshold2 <- threshold1 + gap # t2 >= t1
+    thresholds <- c(threshold1, threshold2)
     
     discrimination_params[i] <- discrimination
     thresholds_list[[i]] <- thresholds
@@ -250,7 +260,7 @@ scoring_boot <- function(score, cgb, cge, tgb, tge, base = TRUE, ctrl = TRUE) {
     subset_data <- get_data(base, ctrl)
     
     # transform subset_data
-    irt_scores <- fscores(grm_trial, response.pattern = subset_data,
+    irt_scores <- fscores(grm_global, response.pattern = subset_data,
                           method = "EAP")
     return(irt_scores[ , 1])
     
@@ -268,35 +278,40 @@ scoring_boot <- function(score, cgb, cge, tgb, tge, base = TRUE, ctrl = TRUE) {
 }
 ```
 
-Create PCA and IRT frameworks based off the trial population, which are globally defined varibales.
+Create PCA and IRT frameworks based off the whole population (RWD), which are globally defined variables.
 ```{r}
 #participant_df <- population_scores[1:n_pars, ]
 #trial_df <- rbind(participant_df, anchor_df)
 
 # PCA
-#pca_trial <- prcomp(encode(trial_df), scale. = T)
-#pc1_trial <- pca_trial$rotation[, "PC1"]
+pca_global <- prcomp(encode(population_scores), scale. = T)
+pc1_global <- pca_global$rotation[, "PC1"]
+
+# scree plot
+eigen_vals <- pca_global$sdev^2
+plot(eigen_vals/sum(eigen_vals) * 100, type = "b",
+     xlab = "Principal Component",
+     ylab = "Percentage of Variance Explained")
 
 # IRT
-#invisible(capture.output({
-  #suppressWarnings(suppressMessages({
-    #grm_global <- mirt(trial_df, 1, itemtype = "graded")
-  #}))
-#}))
+invisible(capture.output({
+  suppressWarnings(suppressMessages({
+    grm_global <- mirt(population_scores, 1, itemtype = "graded")
+  }))
+}))
 ```
 
 
 Below we do not resimulate the baseline scores everytime, which means we can use the decay rates from decay_rates_df. Below we are finding empirical power estimates using bootstrap, for different teffs and method, then we can plot the power curves.
 ```{r}
 n_pars <- 260 # number of trial participants
+num_boots <- 500 # number of bootstrap iters
+teffs <- seq(1.1, 2.5, length.out = 10)
+scoring_methods <- c("NSAA", "PCA", "IRT")
 
 power_mat <- matrix(NA, nrow = length(teffs), ncol = length(scoring_methods))
 rownames(power_mat) <- teffs
 colnames(power_mat) <- scoring_methods
-
-num_boots <- 50 # number of bootstrap iters
-teffs <- seq(1.1, 2, length.out = 10)
-scoring_methods <- c("NSAA", "PCA", "IRT")
 
 n_total <- length(teffs) * length(scoring_methods) * num_boots
 pb_whole <- txtProgressBar(min = 0, max = n_total, style = 3)
@@ -324,17 +339,17 @@ for (teff_idx in seq_along(teffs)) {
                                replace = TRUE)
       sample_df <- population_scores[sample_indices, ]
       
-      # 1b. Introduce Anchors for fitting
+      # 1b. Introduce Anchors for fitting PCA
       fit_df <- rbind(sample_df, anchor_df)
       
-      # 1c. Fit PCA and IRT to fit_df
+      # 1c. Fit PCA to fit_df
       pca_trial <- prcomp(encode(fit_df), scale. = T)
       pc1_trial <- pca_trial$rotation[, "PC1"]
-      invisible(capture.output({
-        suppressWarnings(suppressMessages({
-          grm_trial <- mirt(fit_df, 1, itemtype = "graded")
-          }))
-        }))
+      #invisible(capture.output({
+        #suppressWarnings(suppressMessages({
+          #grm_trial <- mirt(fit_df, 1, itemtype = "graded")
+          #}))
+        #}))
       
       # 2. Split into control and treatment (by halving the dataset)
       ctrlsample_base  <- sample_df[1:floor(n_pars / 2), ]
@@ -424,7 +439,7 @@ for (teff_idx in seq_along(teffs)) {
 print(power_mat)
 ```
 
-```{r}
+```{r message=FALSE, warning=FALSE}
 # Add the treatment effect as a column for easier plotting
 power_df <- as.data.frame(power_mat)
 power_df$Teff <- as.numeric(rownames(power_df))
@@ -474,4 +489,14 @@ all_curves <- ggplot(power_long, aes(x = Teff, y = value, colour = variable)) +
 
 print(NSAA_PCA)
 print(all_curves)
+```
+
+```{r}
+ggsave(
+  filename = "../plots/power_plots/Trial2/All_Methods_v2.png",
+  plot = all_curves,
+  width = 6,
+  height = 4,
+  dpi = 300
+)
 ```
