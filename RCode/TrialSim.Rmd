@@ -43,6 +43,7 @@ library(fastDummies)
 library(factoextra)
 library(mirt)
 library(reshape)
+library(psych)
 ```
 
 One hot encoding function
@@ -77,7 +78,7 @@ simulate_scores <- function(latent_trait, n_items) {
   for (i in 1:n_items) {
     # 'a' parameter - lognormal for positivity
     #discrimination <- runif(1, 0.1, 2.0)
-    log_a <- rnorm(1, mean = 0, sd = 1)
+    log_a <- rnorm(1, mean = 0, sd = 0.7)
     discrimination <- exp(log_a)
     # 'b' parameters (thresholds)
     # Note, we want ascending=T because 2 is a healthier score
@@ -134,43 +135,50 @@ barplot(discrimination_params,
         col = "blue")
 
 # identify item difficulty based on thresholds
-threshold_means <- sapply(thresholds, mean) 
-difficulty_order <- order(threshold_means, decreasing = TRUE) 
+#difficulty_order <- order(thresholds[1], decreasing = TRUE) 
 
-ordered_items_df <- data.frame(
-                                Item = paste0("Item", 1:n_items),
-                                Mean_Threshold = threshold_means
-                              )[difficulty_order, ]
+#ordered_items_df <- data.frame(
+                                #Item = paste0("Item", 1:n_items),
+                                #Mean_Threshold = thresholds[1]
+                              #)[difficulty_order, ]
 
 ```
 
 Take a sample of the population to take part in a trial, and then split this into a control and treatment group. In practise this would be done randomly but here we assign the first half (of the sample) to control. Then assign decay rates based off the difficulty of each item which is given by the threshold parameter used to generate the data.
 
 ```{r}
+thresholds_mat <- do.call(rbind, thresholds)
+colnames(thresholds_mat) <- c("t1", "t2")
+
+min_threshold <- min(thresholds_mat)
+shift_value <- ifelse(min_threshold < 0, abs(min_threshold) + 0.2, 0)
+thresholds_matrix <- thresholds_mat + shift_value
+
+# Display the shift value
+cat("Shift Value Applied to Thresholds:", shift_value, "\n\n")
+
 # assign decay factors based off the trial duration being a year
-rate_21 <- 0.8
-rate_10 <- 1.6
-rate_20 <- 0.4
+rate_21 = 1.6
+rate_10 = 0.8
+rate_20 = 1 / ((1 / rate_21) + (1 / rate_10))
 
-# Shift thresholds to make all values positive
-shift_constant <- abs(min(unlist(thresholds))) + 1
-shifted_thresholds <- lapply(thresholds, function(t) t + shift_constant)
-threshold_means <- sapply(shifted_thresholds, mean)
+# Generate decay rates proportional to their difficulty
+calculate_decay_rates <- function(thresh_matrix) {
+  decay_rates <- data.frame(
+    l_21 = thresh_matrix[, "t2"] * rate_21,
+    l_10 = thresh_matrix[, "t2"] * rate_10,
+    l_20= thresh_matrix[, "t2"] * rate_20
+  )
+  
+  # Ensure no decay rate is below a minimal threshold (e.g., 0.1)
+  decay_rates$l_21 <- pmax(decay_rates$l_21, 0.1)
+  decay_rates$l_10 <- pmax(decay_rates$l_10, 0.1)
+  decay_rates$l_20 <- pmax(decay_rates$l_20, 0.1)
+  
+  return(decay_rates)
+}
 
-# Generate decay rates proportional to shifted thresholds
-decay_rates <- sapply(threshold_means, function(mean_thresh) {
-  c(l_21 = mean_thresh * rate_21, 
-    l_10 = mean_thresh * rate_10, 
-    l_20 = mean_thresh * rate_20)
-})
-decay_rates <- t(decay_rates)
-
-decay_rates_df <- data.frame(
-  l_21 = decay_rates[, 1],
-  l_10 = decay_rates[, 2],
-  l_20 = decay_rates[, 3]
-)
-
+decay_rates_df <- calculate_decay_rates(thresholds_matrix)
 rownames(decay_rates_df) = paste0("Item", 1:n_items)
 ```
 
@@ -223,6 +231,36 @@ anchor_df[11:20, ] <- 1
 anchor_df[21:30, ] <- 2
 ```
 
+Create PCA and IRT frameworks based off the whole population (RWD), which are globally defined variables.
+```{r message=FALSE, warning=FALSE}
+# PCA
+resistant_df <- rbind(population_scores, anchor_df)
+# one-hot encoded
+pca_global <- prcomp(encode(resistant_df), scale. = T)
+pc1_global <- pca_global$rotation[, "PC1"]
+pcs_global <- pca_global$rotation[, c("PC1", "PC2")]
+
+# polychoric
+poly_corr <- polychoric(resistant_df)$rho
+pca_polyglobal <- principal(poly_corr, nfactors = 2, rotate = "none")
+pc1_polyglobal <- as.matrix(pca_polyglobal$loadings)[, "PC1"]
+
+# IRT
+invisible(capture.output({
+  suppressWarnings(suppressMessages({
+    grm_global <- mirt(resistant_df, 1, itemtype = "graded")
+  }))
+}))
+
+pc_scores <- as.matrix(encode(population_scores)) %*% (pc1_global*-1)
+pc_polyscores <- as.matrix(population_scores) %*% pc1_polyglobal
+nsaa_scores <- rowSums(population_scores)
+irt_global <- fscores(grm_global, response.pattern = population_scores, method="EAP")
+cor.test(pc_scores, latent_trait, method = "spearman")
+cor.test(nsaa_scores, latent_trait, method = "spearman")
+cor.test(irt_global[ , 1], latent_trait, nethod = "spearman")
+```
+
 Below we define the bootstrap-compatible scoring function adapted from above - only change is that it takes in the datasets as input. Note that during boot iterations the sampled datasets will change!
 ```{r}
 # cgb is ctrl_grp_base abbreviated
@@ -240,7 +278,7 @@ scoring_boot <- function(score, cgb, cge, tgb, tge, base = TRUE, ctrl = TRUE) {
   }
   
   # NSAA helper
-  basic_sums <- function(base, ctrl) {
+  do_nsaa <- function(base, ctrl) {
     subset_data <- get_data(base, ctrl)
     return(rowSums(subset_data))
   }
@@ -250,8 +288,11 @@ scoring_boot <- function(score, cgb, cge, tgb, tge, base = TRUE, ctrl = TRUE) {
     
     subset_data <- encode(get_data(base, ctrl))
     #pc1_scores <- as.matrix(subset_data) %*% pc1_global[colnames(subset_data)]
-    pc1_scores <- as.matrix(subset_data) %*% pc1_trial[colnames(subset_data)]
-    return(pc1_scores)
+    #pc_scores <- as.matrix(subset_data) %*% pcs_global[colnames(subset_data), ]
+    #pc1_scores <- as.matrix(subset_data) %*% pc1_trial[colnames(subset_data)]
+    #scores <- sqrt(rowSums(pc_scores^2))
+    pc1_polyscores <- as.matrix(get_data(base, ctrl)) %*% pc1_polyglobal
+    return(pc1_polyscores)
   }
   
   # IRT helper - this is wrong for IRT!
@@ -268,45 +309,21 @@ scoring_boot <- function(score, cgb, cge, tgb, tge, base = TRUE, ctrl = TRUE) {
   }
   
   result <- switch(score,
-    "NSAA" = basic_sums(base, ctrl),
+    "NSAA" = do_nsaa(base, ctrl),
     "PCA"  = do_pca(base, ctrl),
     "IRT"  = do_irt(base, ctrl),
-    basic_sums(base, ctrl)
+    "NA"
   )
   
   return(result)
 }
 ```
 
-Create PCA and IRT frameworks based off the whole population (RWD), which are globally defined variables.
-```{r}
-#participant_df <- population_scores[1:n_pars, ]
-#trial_df <- rbind(participant_df, anchor_df)
-
-# PCA
-pca_global <- prcomp(encode(population_scores), scale. = T)
-pc1_global <- pca_global$rotation[, "PC1"]
-
-# scree plot
-eigen_vals <- pca_global$sdev^2
-plot(eigen_vals/sum(eigen_vals) * 100, type = "b",
-     xlab = "Principal Component",
-     ylab = "Percentage of Variance Explained")
-
-# IRT
-invisible(capture.output({
-  suppressWarnings(suppressMessages({
-    grm_global <- mirt(population_scores, 1, itemtype = "graded")
-  }))
-}))
-```
-
-
 Below we do not resimulate the baseline scores everytime, which means we can use the decay rates from decay_rates_df. Below we are finding empirical power estimates using bootstrap, for different teffs and method, then we can plot the power curves.
 ```{r}
 n_pars <- 260 # number of trial participants
-num_boots <- 500 # number of bootstrap iters
-teffs <- seq(1.1, 2.5, length.out = 10)
+num_boots <- 1000 # number of bootstrap iters
+teffs <- seq(1.1, 3, length.out = 10)
 scoring_methods <- c("NSAA", "PCA", "IRT")
 
 power_mat <- matrix(NA, nrow = length(teffs), ncol = length(scoring_methods))
@@ -340,16 +357,11 @@ for (teff_idx in seq_along(teffs)) {
       sample_df <- population_scores[sample_indices, ]
       
       # 1b. Introduce Anchors for fitting PCA
-      fit_df <- rbind(sample_df, anchor_df)
+      #fit_df <- rbind(sample_df, anchor_df)
       
       # 1c. Fit PCA to fit_df
-      pca_trial <- prcomp(encode(fit_df), scale. = T)
-      pc1_trial <- pca_trial$rotation[, "PC1"]
-      #invisible(capture.output({
-        #suppressWarnings(suppressMessages({
-          #grm_trial <- mirt(fit_df, 1, itemtype = "graded")
-          #}))
-        #}))
+      #pca_trial <- prcomp(encode(fit_df), scale. = T)
+      #pc1_trial <- pca_trial$rotation[, "PC1"]
       
       # 2. Split into control and treatment (by halving the dataset)
       ctrlsample_base  <- sample_df[1:floor(n_pars / 2), ]
@@ -447,30 +459,27 @@ power_df$Teff <- as.numeric(rownames(power_df))
 power_long <- melt(power_df, id.vars = "Teff", 
                    variable.name = "Method", 
                    value.name = "Power")
-# power_long has columns: Teff, Method, Power
+# power_long has columns: Teff, Variable and Value
+
+#NSAA_PCA <- ggplot(
+    #subset(power_long, variable %in% c("NSAA", "PCA")), 
+    #aes(x = Teff, y = value, colour = variable)
+  #) +
+  #geom_line(size = 1) +
+  #geom_point() +
+  #geom_hline(yintercept = 0.8, colour = "red", linetype = "dashed") +
+  #scale_y_continuous(limits = c(0, 1)) +
+  #theme_minimal() +
+  #theme(legend.position = c(0.05, 0.95),
+        #legend.justification = c(0, 1)) +
+  #labs(
+    #title = "Power (NSAA & PCA) vs. Treatment Effect",
+    #x = "Treatment Effect",
+    #y = "Power"
+  #)
 
 #-----------------------------------------------------------
-# 1) Plot NSAA & PCA only
-#-----------------------------------------------------------
-NSAA_PCA <- ggplot(
-    subset(power_long, variable %in% c("NSAA", "PCA")), 
-    aes(x = Teff, y = value, colour = variable)
-  ) +
-  geom_line(size = 1) +
-  geom_point() +
-  geom_hline(yintercept = 0.8, colour = "red", linetype = "dashed") +
-  scale_y_continuous(limits = c(0, 1)) +
-  theme_minimal() +
-  theme(legend.position = c(0.05, 0.95),
-        legend.justification = c(0, 1)) +
-  labs(
-    title = "Power (NSAA & PCA) vs. Treatment Effect",
-    x = "Treatment Effect",
-    y = "Power"
-  )
-
-#-----------------------------------------------------------
-# 2) Plot all methods (NSAA, PCA, IRT)
+# Plotting all methods (NSAA, PCA, IRT)
 #-----------------------------------------------------------
 all_curves <- ggplot(power_long, aes(x = Teff, y = value, colour = variable)) +
   geom_line(size = 1) +
@@ -487,16 +496,164 @@ all_curves <- ggplot(power_long, aes(x = Teff, y = value, colour = variable)) +
   )
 
 
-print(NSAA_PCA)
 print(all_curves)
 ```
 
 ```{r}
 ggsave(
-  filename = "../plots/power_plots/Trial2/All_Methods_v2.png",
-  plot = all_curves,
-  width = 6,
-  height = 4,
+  "../plots/power_plots/Methods_v3.png",
+  all_curves,
+  width = 8, 
+  height = 6, 
+  dpi = 300
+)
+```
+
+Power curves varying sample size and keeping treatment effect constant.
+```{r}
+teff <- 2.5 # treatment effect
+num_boots <- 1000 # number of bootstrap iters
+n_trials <- seq(50, 250, length.out = 10)
+scoring_methods <- c("NSAA", "PCA", "IRT")
+
+power_matrix <- matrix(NA, nrow = length(n_trials), ncol = length(scoring_methods))
+rownames(power_matrix) <- n_trials
+colnames(power_matrix) <- scoring_methods
+
+n_total <- length(n_trials) * length(scoring_methods) * num_boots
+pb_whole <- txtProgressBar(min = 0, max = n_total, style = 3)
+counter <- 0
+
+start_time <- Sys.time()
+
+for (n_idx in seq_along(n_trials)) {
+  n_trial <- n_trials[n_idx]
+  
+  for (method in scoring_methods) {
+    # Initialise num_boots vector to store power values
+    power_iter <- numeric(num_boots)
+    
+    for (i in seq_len(num_boots)) {
+      
+      # 1a. Randomly sample patients from population_scores
+      sample_indices <- sample(seq_len(n_trial), size = n_trial, 
+                               replace = TRUE)
+      sample_df <- population_scores[sample_indices, ]
+      
+      # 2. Split into control and treatment (by halving the dataset)
+      ctrlsample_base  <- sample_df[1:floor(n_trial / 2), ]
+      treatsample_base <- sample_df[(floor(n_trial / 2) + 1):n_trial, ]
+      
+      # 3. Simulate Decays
+      ctrlsample_end <- as.data.frame(apply(ctrlsample_base, 2, function(col) {
+        sapply(col, function(state)
+          simulate_decay(state, decay_rates_df[col, 1],
+                                 decay_rates_df[col, 2],
+                                 decay_rates_df[col, 3],
+                                 0, 1))
+      }))
+      
+      treatsample_end <- as.data.frame(apply(treatsample_base, 2, 
+                                             function(col) {
+        sapply(col, function(state)
+          simulate_decay(state, decay_rates_df[col, 1] / teff,
+                                 decay_rates_df[col, 2] / teff,
+                                 decay_rates_df[col, 3] / teff,
+                                 0, 1))
+      }))
+      
+      # 4. Transform the scores using the scoring method
+      ctrl_base  <- scoring_boot(method, ctrlsample_base,  ctrlsample_end,
+                                 treatsample_base, treatsample_end)
+      ctrl_end   <- scoring_boot(method, ctrlsample_base,  ctrlsample_end,
+                                 treatsample_base, treatsample_end, 
+                                 base = FALSE)
+      treat_base <- scoring_boot(method, ctrlsample_base,  ctrlsample_end,
+                                 treatsample_base, treatsample_end, 
+                                 ctrl = FALSE)
+      treat_end  <- scoring_boot(method, ctrlsample_base,  ctrlsample_end,
+                                 treatsample_base, treatsample_end,
+                                 base = FALSE, ctrl = FALSE)
+      
+      # 5. Build a dataframe for linear modelling
+      boot_data <- data.frame(
+        Score = c(ctrl_base, ctrl_end, treat_base, treat_end),
+        Group = factor(c(rep(0, length(ctrl_base)),
+                         rep(0, length(ctrl_end)),
+                         rep(1, length(treat_base)),
+                         rep(1, length(treat_end)))),
+        Time  = factor(c(rep(0, length(ctrl_base)),
+                         rep(1, length(ctrl_end)),
+                         rep(0, length(treat_base)),
+                         rep(1, length(treat_end))))
+      )
+      
+      # 6. Fit linear model and gather p-value
+      lm_boot <- lm(Score ~ Group * Time, data = boot_data)
+      coefs <- summary(lm_boot)$coefficients
+      p_val <- coefs["Group1:Time1", "Pr(>|t|)"]
+      
+      # 7. Record whether p < 0.05
+      power_iter[i] <- as.numeric(p_val < 0.05)
+
+      counter <- counter + 1
+      setTxtProgressBar(pb_whole, counter)
+      
+      # 8. Overwrite the stopwatch on the next line
+      current_time <- Sys.time()
+      elapsed_time <- as.numeric(difftime(current_time, start_time, 
+                                          units = "mins"))
+      
+      # Move back to the line below the progress bar: we use "\r" to overwrite
+      # on that line, and no "\n" so it stays on that line
+      cat(sprintf("\rElapsed time: %.2f minutes   ", elapsed_time))
+      flush.console()
+    }
+    
+    # Store power estimate
+    power_matrix[n_idx, method] <- mean(power_iter)
+    
+  }
+}
+```
+
+Experimenting to see why PCA might be failing - main finding is that the loadings vary with time which hints at the fact that the item variability are not constant and thus is not a consistent measure of item discrimination / difficulty - causal abstraction as an extension.
+
+```{r}
+print(power_matrix)
+```
+
+```{r}
+power_ss <- as.data.frame(power_matrix)
+power_ss$SampleSize <- as.numeric(rownames(power_ss))
+
+powerss_long <- melt(power_ss, id.vars = "SampleSize", 
+                   variable.name = "Method", 
+                   value.name = "Power")
+
+sample_sizes <- ggplot(powerss_long, aes(x = SampleSize, y = value, colour = variable)) +
+  geom_line(size = 1) +
+  geom_point() +
+  geom_hline(yintercept = 0.8, colour = "red", linetype = "dashed") +
+  scale_y_continuous(limits = c(0, 1)) +
+  theme_minimal() +
+  theme(legend.position = c(0.05, 0.95),
+        legend.justification = c(0, 1)) +
+  labs(
+    title = "Power (All Methods) vs. Treatment Effect",
+    x = "Treatment Effect",
+    y = "Power"
+  )
+
+print(sample_sizes)
+```
+
+```{r}
+ggsave(
+  "../plots/power_plots/sample_size.png",
+  sample_sizes,
+  width = 8, 
+  height = 6, 
   dpi = 300
 )
 ```
